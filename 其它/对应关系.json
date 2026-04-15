@@ -1,0 +1,95 @@
+赣州市: {
+    adcode: "360700",
+    level: "city",
+    name: "赣州市",
+  },
+  章贡区: {
+    adcode: "360702",
+    level: "district",
+    name: "章贡区",
+  },
+  南康区: {
+    adcode: "360703",
+    level: "district",
+    name: "南康区",
+  },
+  赣县区: {
+    adcode: "360704",
+    level: "district",
+    name: "赣县区",
+  },
+  信丰县: {
+    adcode: "360722",
+    level: "county",
+    name: "信丰县",
+  },
+  大余县: {
+    adcode: "360723",
+    level: "county",
+    name: "大余县",
+  },
+  上犹县: {
+    adcode: "360724",
+    level: "county",
+    name: "上犹县",
+  },
+  崇义县: {
+    adcode: "360725",
+    level: "county",
+    name: "崇义县",
+  },
+  安远县: {
+    adcode: "360726",
+    level: "county",
+    name: "安远县",
+  },
+  龙南市: {
+    adcode: "360783",
+    level: "city",
+    name: "龙南市",
+  },
+  定南县: {
+    adcode: "360728",
+    level: "county",
+    name: "定南县",
+  },
+  全南县: {
+    adcode: "360729",
+    level: "county",
+    name: "全南县",
+  },
+  宁都县: {
+    adcode: "360730",
+    level: "county",
+    name: "宁都县",
+  },
+  于都县: {
+    adcode: "360731",
+    level: "county",
+    name: "于都县",
+  },
+  兴国县: {
+    adcode: "360732",
+    level: "county",
+    name: "兴国县",
+  },
+  会昌县: {
+    adcode: "360733",
+    level: "county",
+    name: "会昌县",
+  },
+  寻乌县: {
+    adcode: "360734",
+    level: "county",
+    name: "寻乌县",
+  },
+  石城县: {
+    adcode: "360735",
+    level: "county",
+    name: "石城县",
+  },
+  瑞金市: {
+    adcode: "360781",
+    level: "city",
+    name: "瑞金市",
+  },
