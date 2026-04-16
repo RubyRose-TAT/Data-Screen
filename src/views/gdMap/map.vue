@@ -3,7 +3,7 @@
     <canvas id="canvasMap"></canvas>
     <div v-if="drilledDown" class="drill-back" @click="handleDrillUp">
       <span class="drill-back-icon">←</span>
-      <span>返回赣州市</span>
+      <span>返回上级</span>
     </div>
   </div>
 </template>
@@ -69,9 +69,10 @@ defineExpose({
 
   .drill-back {
     position: absolute;
-    top: 80px;
-    left: 20px;
-    z-index: 100;
+    top: 94px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2000;
     display: flex;
     align-items: center;
     gap: 6px;
@@ -264,6 +265,14 @@ defineExpose({
     .other-label {
       display: flex;
       flex-direction: column;
+      &.drill-title {
+        span {
+          font-size: 34px;
+          &:last-child {
+            font-size: 11px;
+          }
+        }
+      }
     }
     span {
       font-size: 46px;

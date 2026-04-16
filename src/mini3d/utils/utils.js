@@ -151,8 +151,11 @@ export const setMeshQuaternion = (mesh, lon, lat, R) => {
 }
 
 export function findMinMax(arr) {
-  let max = arr.reduce((a, b) => Math.max(a, b), Math.max(arr[0], arr[1]))
-  let min = arr.reduce((a, b) => Math.min(a, b), Math.min(arr[0], arr[1]))
+  if (!Array.isArray(arr) || arr.length === 0) {
+    return { max: undefined, min: undefined }
+  }
+  let max = arr.reduce((a, b) => Math.max(a, b), arr[0])
+  let min = arr.reduce((a, b) => Math.min(a, b), arr[0])
   return { max, min }
 }
 /**
@@ -242,7 +245,7 @@ export const generateGrid = (coordinates, gap = 3) => {
       return pointInPolygon(item, coords)
     })
     .map((item) => {
-      return new THREE.Vector3(item[0], item[1], 0)
+      return new Vector3(item[0], item[1], 0)
     })
   return { scopeInsidePoint, scopePoint }
 }
