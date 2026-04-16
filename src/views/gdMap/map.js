@@ -898,6 +898,7 @@ export class World extends Mini3d {
     mesh.renderOrder = 3
     mesh.rotation.x = -Math.PI / 2
     mesh.position.set(0, 0.21, 0)
+    this.diffuseMesh = mesh
     this.scene.add(mesh)
   }
 
@@ -1454,6 +1455,10 @@ export class World extends Mini3d {
       this.rotateBorder2.position.z = -ringCenterY
       this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
       this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
+      if (this.diffuseMesh) {
+        this.diffuseMesh.position.x = ringCenterX
+        this.diffuseMesh.position.z = -ringCenterY
+      }
       this.infoLabelElement.forEach((label) => {
         label.visible = false
       })
@@ -1652,6 +1657,10 @@ export class World extends Mini3d {
     this.rotateBorder2.position.z = 0
     this.rotateBorder1.scale.set(1, 1, 1)
     this.rotateBorder2.scale.set(1, 1, 1)
+    if (this.diffuseMesh) {
+      this.diffuseMesh.position.x = 0
+      this.diffuseMesh.position.z = 0
+    }
     this.allProvinceLabel.forEach((label) => {
       label.show()
     })
