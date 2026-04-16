@@ -115,6 +115,13 @@ export class World extends Mini3d {
       center: [114.933, 25.829],
       type: 'city'
     }
+    this.districtConfig = provincesData.reduce((acc, item) => {
+      acc[item.name] = {
+        center: item.center,
+        enName: item.enName.toUpperCase(),
+      }
+      return acc
+    }, {})
     // 是否点击
     this.clicked = false
     // 下钻状态
@@ -993,6 +1000,7 @@ export class World extends Mini3d {
     // otherLabel.push(iconLabel1)
     // otherLabel.push(iconLabel2)
     this.otherLabel = otherLabel
+    this.mapFocusLabel = mapFocusLabel
 
     function labelStyle01(province, label3d, labelGroup) {
       let label = label3d.create("", `china-label ${province.blur ? " blur" : ""}`, false)
@@ -1365,10 +1373,10 @@ export class World extends Mini3d {
     })
 
     if (total === 0) {
-      return this.geoProjectionCenter
+      return { lng: this.geoProjectionCenter[0], lat: this.geoProjectionCenter[1] }
     }
 
-    return [sumLng / total, sumLat / total]
+    return { lng: sumLng / total, lat: sumLat / total }
   }
 
   getGeoJSONProjectedBounds(geoJSON) {
@@ -1431,9 +1439,9 @@ export class World extends Mini3d {
       }
       const geoDataText = await resp.text()
       const geoDataJSON = JSON.parse(geoDataText)
-      const districtInfo = provincesData.find((item) => item.name === name)
+      const districtInfo = this.districtConfig[name] || {}
       const districtCenter = this.getGeoJSONCenter(geoDataJSON)
-      const [districtX, districtY] = this.geoProjection(districtCenter)
+      const [districtX, districtY] = this.geoProjection([districtCenter.lng, districtCenter.lat])
       const districtWorldPosition = new Vector3(districtX, 0, -districtY)
       const { minX, minY, maxX, width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
       const districtSpan = Math.max(width, height)
@@ -1444,7 +1452,7 @@ export class World extends Mini3d {
       this.focusMapGroup.visible = false
       this.barGroup.visible = false
       this.quanGroup.visible = false
-      this.labelGroup.visible = false
+      this.labelGroup.visible = true
       this.InfoPointGroup.visible = false
       this.flyLineGroup.visible = false
       this.flyLineFocusGroup.visible = false
@@ -1458,9 +1466,11 @@ export class World extends Mini3d {
       this.allProvinceLabel.forEach((label) => {
         label.hide()
       })
-      this.otherLabel.forEach((label) => {
-        label.hide()
-      })
+      this.mapFocusLabel.init(
+        `<div class="other-label"><span>${name}</span><span>${districtInfo.enName || name}</span></div>`,
+        new Vector3(maxX + 0.8, -minY + 0.4, 0.4)
+      )
+      this.mapFocusLabel.show()
 
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
@@ -1581,17 +1591,10 @@ export class World extends Mini3d {
     drillMap.setParent(this.drillMapGroup)
     drillMapTop.setParent(this.drillMapGroup)
     drillLine.setParent(this.drillMapGroup)
-
-    const drillCenterLabel = this.label3d.create("", "map-label", false)
-    drillCenterLabel.init(
-      `
-      <div class="other-label"><span>${name}</span><span>${(districtInfo?.enName || name).toUpperCase()}</span></div>
-      `,
-      new Vector3(maxX + 0.8, -minY + 0.4, this.depth + 0.5)
-    )
-    this.label3d.setLabelStyle(drillCenterLabel, 0.015, "x")
-    drillCenterLabel.setParent(this.drillMapGroup)
-    this.drillCenterLabel = drillCenterLabel
+    const drillFocus = new Focus(this, {color1: 0xbdfdfd, color2: 0xbdfdfd})
+    drillFocus.position.set(districtX, -districtY, this.depth + 0.44)
+    drillFocus.scale.set(0.8, 0.8, 0.8)
+    this.drillMapGroup.add(drillFocus)
 
     this.scene.add(this.drillMapGroup)
 
@@ -1636,8 +1639,6 @@ export class World extends Mini3d {
       this.drillMapGroup = null
     }
     this.drillGroup = null
-    this.drillCenterLabel = null
-
     this.focusMapGroup.visible = true
     this.barGroup.visible = true
     this.quanGroup.visible = true
@@ -1652,9 +1653,14 @@ export class World extends Mini3d {
     this.allProvinceLabel.forEach((label) => {
       label.show()
     })
-    this.otherLabel.forEach((label) => {
-      label.show()
-    })
+    this.mapFocusLabel.init(
+      `<div class="other-label"><span>${this.mapFocusLabelInfo.name}</span><span>${this.mapFocusLabelInfo.enName}</span></div>`,
+      (() => {
+        const [x, y] = this.geoProjection(this.mapFocusLabelInfo.center)
+        return new Vector3(x, -y, 0.4)
+      })()
+    )
+    this.mapFocusLabel.show()
 
     this.drilledDown = false
     this.drilledName = ""
