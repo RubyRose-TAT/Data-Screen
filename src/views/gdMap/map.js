@@ -124,6 +124,8 @@ export class World extends Mini3d {
     this.drilledName = ""
     this.drillGroup = null
     this.drillMapGroup = null
+    this.districtGeoCache = new Map()
+    this.districtGeoLoading = new Map()
     // 雾
     this.scene.fog = new Fog(0x102736, 1, 50)
     // 背景
@@ -141,6 +143,7 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
+    this.preloadDistrictGeoJSON()
   }
 
   init() {
@@ -1426,6 +1429,48 @@ export class World extends Mini3d {
     return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
   }
 
+  async loadDistrictGeoJSON(adcode) {
+    if (this.districtGeoCache.has(adcode)) {
+      return this.districtGeoCache.get(adcode)
+    }
+    if (this.districtGeoLoading.has(adcode)) {
+      return this.districtGeoLoading.get(adcode)
+    }
+    const base_url = import.meta.env.BASE_URL
+    const request = fetch(base_url + "assets/geojson/" + adcode + ".geojson")
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error("HTTP error: " + resp.status)
+        }
+        return resp.text()
+      })
+      .then((geoDataText) => {
+        const payload = {
+          text: geoDataText,
+          json: JSON.parse(geoDataText),
+        }
+        this.districtGeoCache.set(adcode, payload)
+        this.districtGeoLoading.delete(adcode)
+        return payload
+      })
+      .catch((err) => {
+        this.districtGeoLoading.delete(adcode)
+        throw err
+      })
+    this.districtGeoLoading.set(adcode, request)
+    return request
+  }
+
+  preloadDistrictGeoJSON() {
+    setTimeout(() => {
+      Object.values(this.districtConfig)
+        .filter((item) => item.adcode && item.adcode !== "360700")
+        .forEach((item) => {
+          this.loadDistrictGeoJSON(item.adcode).catch(() => {})
+        })
+    }, 1200)
+  }
+
   async drillDown(name) {
     const districtInfo = this.districtConfig[name]
     if (!districtInfo?.adcode) {
@@ -1438,13 +1483,9 @@ export class World extends Mini3d {
     this.drilledName = name
 
     try {
-      const base_url = import.meta.env.BASE_URL
-      const resp = await fetch(base_url + "assets/geojson/" + adcode + ".geojson")
-      if (!resp.ok) {
-        throw new Error("HTTP error: " + resp.status)
-      }
-      const geoDataText = await resp.text()
-      const geoDataJSON = JSON.parse(geoDataText)
+      const geoData = await this.loadDistrictGeoJSON(adcode)
+      const geoDataText = geoData.text
+      const geoDataJSON = geoData.json
       const [districtX, districtY] = this.geoProjection(districtInfo.center)
       const districtWorldPosition = new Vector3(districtX, 0, districtY)
       const ringCenterX = districtX
