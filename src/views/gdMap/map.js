@@ -1063,6 +1063,11 @@ export class World extends Mini3d {
       `<div class="other-label"><span>${name}</span><span>${enName}</span></div>`,
       new Vector3(x + offset[0], -y + offset[1], 0.4)
     )
+    const element = this.mapFocusLabel.element?.querySelector(".other-label")
+    if (element) {
+      element.style.transform = "translateY(0)"
+      element.style.opacity = "1"
+    }
     this.mapFocusLabel.show()
   }
 
