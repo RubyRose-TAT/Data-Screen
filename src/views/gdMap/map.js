@@ -47,6 +47,7 @@ import {geoMercator} from "d3-geo"
 import labelIcon from "@/assets/texture/label-icon.png"
 import chinaData from "./map/chinaData"
 import provincesData from "./map/provincesData"
+import districtConfig from "./map/districtConfig"
 import scatterData from "./map/scatter"
 import infoData from "./map/infoData"
 import gsap from "gsap"
@@ -115,6 +116,7 @@ export class World extends Mini3d {
       center: [114.933, 25.829],
       type: 'city'
     }
+    this.districtConfig = districtConfig
     // 是否点击
     this.clicked = false
     // 下钻状态
@@ -122,6 +124,8 @@ export class World extends Mini3d {
     this.drilledName = ""
     this.drillGroup = null
     this.drillMapGroup = null
+    this.districtGeoCache = new Map()
+    this.districtGeoLoading = new Map()
     // 雾
     this.scene.fog = new Fog(0x102736, 1, 50)
     // 背景
@@ -139,6 +143,7 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
+    this.preloadDistrictGeoJSON()
   }
 
   init() {
@@ -896,6 +901,7 @@ export class World extends Mini3d {
     mesh.renderOrder = 3
     mesh.rotation.x = -Math.PI / 2
     mesh.position.set(0, 0.21, 0)
+    this.diffuseMesh = mesh
     this.scene.add(mesh)
   }
 
@@ -993,6 +999,7 @@ export class World extends Mini3d {
     // otherLabel.push(iconLabel1)
     // otherLabel.push(iconLabel2)
     this.otherLabel = otherLabel
+    this.mapFocusLabel = mapFocusLabel
 
     function labelStyle01(province, label3d, labelGroup) {
       let label = label3d.create("", `china-label ${province.blur ? " blur" : ""}`, false)
@@ -1050,6 +1057,21 @@ export class World extends Mini3d {
       label.setParent(labelGroup)
       return label
     }
+  }
+
+  setMapFocusTitle(name, enName, center, offset = [0, 0], isDistrict = false) {
+    if (!this.mapFocusLabel) return
+    const [x, y] = this.geoProjection(center)
+    this.mapFocusLabel.init(
+      `<div class="other-label ${isDistrict ? "drill-title" : ""}"><span>${name}</span><span>${enName}</span></div>`,
+      new Vector3(x + offset[0], -y + offset[1], 0.4)
+    )
+    const element = this.mapFocusLabel.element?.querySelector(".other-label")
+    if (element) {
+      element.style.transform = "translateY(0)"
+      element.style.opacity = "1"
+    }
+    this.mapFocusLabel.show()
   }
 
   createRotateBorder() {
@@ -1340,41 +1362,167 @@ export class World extends Mini3d {
     return geoMercator().center(this.geoProjectionCenter).scale(this.geoProjectionScale).translate([0, 0])(args)
   }
 
-  async drillDown(name) {
-    const districtAdcodeMap = {
-      "章贡区": "360702", "南康区": "360703", "赣县区": "360704",
-      "信丰县": "360722", "大余县": "360723", "上犹县": "360724",
-      "崇义县": "360725", "安远县": "360726", "定南县": "360728",
-      "全南县": "360729", "宁都县": "360730", "于都县": "360731",
-      "兴国县": "360732", "会昌县": "360733", "寻乌县": "360734",
-      "石城县": "360735", "瑞金市": "360781", "龙南市": "360783",
+  getGeoJSONCenter(geoJSON) {
+    let total = 0
+    let sumLng = 0
+    let sumLat = 0
+
+    geoJSON.features.forEach((feature) => {
+      const geom = feature.geometry
+      let coords = []
+
+      if (geom.type === "Polygon") {
+        coords = [geom.coordinates[0]]
+      } else if (geom.type === "MultiPolygon") {
+        coords = geom.coordinates.map((polygon) => polygon[0])
+      } else {
+        return
+      }
+
+      coords.forEach((outerRing) => {
+        outerRing.forEach(([lng, lat]) => {
+          sumLng += lng
+          sumLat += lat
+          total++
+        })
+      })
+    })
+
+    if (total === 0) {
+      return { lng: this.geoProjectionCenter[0], lat: this.geoProjectionCenter[1] }
     }
-    const adcode = districtAdcodeMap[name]
-    if (!adcode) {
+
+    return { lng: sumLng / total, lat: sumLat / total }
+  }
+
+  getGeoJSONProjectedBounds(geoJSON) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    const visitCoords = (coordinates) => {
+      coordinates.forEach(([lng, lat]) => {
+        const [x, y] = this.geoProjection([lng, lat])
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      })
+    }
+
+    geoJSON.features.forEach((feature) => {
+      const geom = feature.geometry
+      if (geom.type === "Polygon") {
+        geom.coordinates.forEach((ring) => visitCoords(ring))
+      } else if (geom.type === "MultiPolygon") {
+        geom.coordinates.forEach((polygon) => {
+          polygon.forEach((ring) => visitCoords(ring))
+        })
+      }
+    })
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      return { minX: -4, minY: -4, maxX: 4, maxY: 4, width: 8, height: 8 }
+    }
+
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
+  }
+
+  async loadDistrictGeoJSON(adcode) {
+    if (this.districtGeoCache.has(adcode)) {
+      return this.districtGeoCache.get(adcode)
+    }
+    if (this.districtGeoLoading.has(adcode)) {
+      return this.districtGeoLoading.get(adcode)
+    }
+    const base_url = import.meta.env.BASE_URL
+    const request = fetch(base_url + "assets/geojson/" + adcode + ".geojson")
+      .then((resp) => {
+        if (!resp.ok) {
+          throw new Error("HTTP error: " + resp.status)
+        }
+        return resp.text()
+      })
+      .then((geoDataText) => {
+        const payload = {
+          text: geoDataText,
+          json: JSON.parse(geoDataText),
+        }
+        this.districtGeoCache.set(adcode, payload)
+        this.districtGeoLoading.delete(adcode)
+        return payload
+      })
+      .catch((err) => {
+        this.districtGeoLoading.delete(adcode)
+        throw err
+      })
+    this.districtGeoLoading.set(adcode, request)
+    return request
+  }
+
+  preloadDistrictGeoJSON() {
+    setTimeout(() => {
+      Object.values(this.districtConfig)
+        .filter((item) => item.adcode && item.adcode !== "360700")
+        .forEach((item) => {
+          this.loadDistrictGeoJSON(item.adcode).catch(() => {})
+        })
+    }, 1200)
+  }
+
+  async drillDown(name) {
+    const districtInfo = this.districtConfig[name]
+    if (!districtInfo?.adcode) {
       console.warn("未找到区县 adcode:", name)
       return
     }
+    const adcode = districtInfo.adcode
 
     this.drilledDown = true
     this.drilledName = name
 
     try {
-      const base_url = import.meta.env.BASE_URL
-      console.log("正在加载区县 geojson:", base_url + "assets/geojson/" + adcode + ".geojson")
-      const resp = await fetch(base_url + "assets/geojson/" + adcode + ".geojson")
-      if (!resp.ok) {
-        throw new Error("HTTP error: " + resp.status)
-      }
-      const geoDataText = await resp.text()
-      console.log("geojson 加载成功")
-      
-      // 直接使用市级地图的投影中心和缩放
+      const geoData = await this.loadDistrictGeoJSON(adcode)
+      const geoDataText = geoData.text
+      const [districtX, districtY] = this.geoProjection(districtInfo.center)
+      const districtWorldPosition = new Vector3(districtX, 0, districtY)
+      const ringCenterX = districtX
+      const ringCenterY = districtY
+      const outerScale = districtInfo.ringOuterScale
+      const innerScale = districtInfo.ringInnerScale
+      const cameraHeight = districtInfo.cameraHeight
+      const cameraDistance = districtInfo.cameraDistance
+
+      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
       this.barGroup.visible = false
       this.quanGroup.visible = false
-      this.labelGroup.visible = false
+      this.labelGroup.visible = true
       this.InfoPointGroup.visible = false
-
+      this.flyLineGroup.visible = false
+      this.flyLineFocusGroup.visible = false
+      this.scatterGroup.visible = false
+      this.particleGroup.visible = false
+      this.rotateBorder1.visible = true
+      this.rotateBorder2.visible = true
+      this.rotateBorder1.position.x = ringCenterX
+      this.rotateBorder1.position.z = ringCenterY
+      this.rotateBorder2.position.x = ringCenterX
+      this.rotateBorder2.position.z = ringCenterY
+      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
+      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
+      if (this.diffuseMesh) {
+        this.diffuseMesh.position.x = ringCenterX
+        this.diffuseMesh.position.z = ringCenterY
+      }
+      this.infoLabelElement.forEach((label) => {
+        label.visible = false
+      })
+      this.allProvinceLabel.forEach((label) => {
+        label.hide()
+      })
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0], true)
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
       this.drillMapGroup.position.set(0, 0.2, 0)
@@ -1501,12 +1649,19 @@ export class World extends Mini3d {
       drillTopMaterial, sideMaterial,
     }
 
+    gsap.killTweensOf(this.camera.instance.position)
     gsap.to(this.camera.instance.position, {
       duration: 1.5,
-      x: -0.17427287762525134,
-      y: 13.678992786206543,
-      z: 20.688611202093714,
+      x: districtWorldPosition.x,
+      y: cameraHeight,
+      z: districtWorldPosition.z + cameraDistance,
       ease: "circ.out",
+      onUpdate: () => {
+        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+      },
+      onComplete: () => {
+        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+      },
     })
     gsap.to(drillTopMaterial, { duration: 1, opacity: 1, delay: 0.5, ease: "circ.out" })
     gsap.to(sideMaterial, {
@@ -1530,22 +1685,53 @@ export class World extends Mini3d {
       this.drillMapGroup = null
     }
     this.drillGroup = null
-
     this.focusMapGroup.visible = true
     this.barGroup.visible = true
     this.quanGroup.visible = true
     this.labelGroup.visible = true
     this.InfoPointGroup.visible = true
+    this.flyLineGroup.visible = true
+    this.flyLineFocusGroup.visible = true
+    this.scatterGroup.visible = true
+    this.particleGroup.visible = true
+    this.rotateBorder1.visible = true
+    this.rotateBorder2.visible = true
+    this.rotateBorder1.position.x = 0
+    this.rotateBorder1.position.z = 0
+    this.rotateBorder2.position.x = 0
+    this.rotateBorder2.position.z = 0
+    this.rotateBorder1.scale.set(1, 1, 1)
+    this.rotateBorder2.scale.set(1, 1, 1)
+    if (this.diffuseMesh) {
+      this.diffuseMesh.position.x = 0
+      this.diffuseMesh.position.z = 0
+    }
+    this.allProvinceLabel.forEach((label) => {
+      label.show()
+    })
+    this.setMapFocusTitle(
+      this.mapFocusLabelInfo.name,
+      this.mapFocusLabelInfo.enName,
+      this.mapFocusLabelInfo.center,
+      [0, 0]
+    )
 
     this.drilledDown = false
     this.drilledName = ""
 
+    gsap.killTweensOf(this.camera.instance.position)
     gsap.to(this.camera.instance.position, {
       duration: 1.5,
       x: -0.17427287762525134,
       y: 13.678992786206543,
       z: 20.688611202093714,
       ease: "circ.out",
+      onUpdate: () => {
+        this.camera.instance.lookAt(0, 0, 0)
+      },
+      onComplete: () => {
+        this.camera.instance.lookAt(0, 0, 0)
+      },
     })
 
     emitter.$emit("mapDrillUp")
