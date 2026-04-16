@@ -1458,8 +1458,12 @@ export class World extends Mini3d {
       this.flyLineFocusGroup.visible = false
       this.scatterGroup.visible = false
       this.particleGroup.visible = false
-      this.rotateBorder1.visible = false
-      this.rotateBorder2.visible = false
+      this.rotateBorder1.visible = true
+      this.rotateBorder2.visible = true
+      this.rotateBorder1.position.x = districtX
+      this.rotateBorder1.position.z = -districtY
+      this.rotateBorder2.position.x = districtX
+      this.rotateBorder2.position.z = -districtY
       this.infoLabelElement.forEach((label) => {
         label.visible = false
       })
@@ -1650,6 +1654,10 @@ export class World extends Mini3d {
     this.particleGroup.visible = true
     this.rotateBorder1.visible = true
     this.rotateBorder2.visible = true
+    this.rotateBorder1.position.x = 0
+    this.rotateBorder1.position.z = 0
+    this.rotateBorder2.position.x = 0
+    this.rotateBorder2.position.z = 0
     this.allProvinceLabel.forEach((label) => {
       label.show()
     })
