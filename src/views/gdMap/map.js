@@ -1399,10 +1399,10 @@ export class World extends Mini3d {
     })
 
     if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
-      return { width: 8, height: 8 }
+      return { minX: -4, minY: -4, maxX: 4, maxY: 4, width: 8, height: 8 }
     }
 
-    return { width: maxX - minX, height: maxY - minY }
+    return { minX, minY, maxX, maxY, width: maxX - minX, height: maxY - minY }
   }
 
   async drillDown(name) {
@@ -1432,10 +1432,10 @@ export class World extends Mini3d {
       const geoDataText = await resp.text()
       const geoDataJSON = JSON.parse(geoDataText)
       const districtInfo = provincesData.find((item) => item.name === name)
-      const districtCenter = districtInfo?.center || this.getGeoJSONCenter(geoDataJSON)
+      const districtCenter = this.getGeoJSONCenter(geoDataJSON)
       const [districtX, districtY] = this.geoProjection(districtCenter)
       const districtWorldPosition = new Vector3(districtX, 0, -districtY)
-      const { width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
+      const { minX, minY, maxX, width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
       const districtSpan = Math.max(width, height)
       const cameraHeight = Math.max(7, Math.min(14, districtSpan * 0.7))
       const cameraDistance = Math.max(9, Math.min(18, districtSpan * 1.2))
@@ -1454,6 +1454,12 @@ export class World extends Mini3d {
       this.rotateBorder2.visible = false
       this.infoLabelElement.forEach((label) => {
         label.visible = false
+      })
+      this.allProvinceLabel.forEach((label) => {
+        label.hide()
+      })
+      this.otherLabel.forEach((label) => {
+        label.hide()
       })
 
       this.drillMapGroup = new Group()
@@ -1581,10 +1587,11 @@ export class World extends Mini3d {
       `
       <div class="other-label"><span>${name}</span><span>${(districtInfo?.enName || name).toUpperCase()}</span></div>
       `,
-      new Vector3(districtX + 0.6, -districtY + 0.6, this.depth + 0.5)
+      new Vector3(maxX + 0.8, -minY + 0.4, this.depth + 0.5)
     )
     this.label3d.setLabelStyle(drillCenterLabel, 0.015, "x")
     drillCenterLabel.setParent(this.drillMapGroup)
+    this.drillCenterLabel = drillCenterLabel
 
     this.scene.add(this.drillMapGroup)
 
@@ -1593,6 +1600,7 @@ export class World extends Mini3d {
       drillTopMaterial, sideMaterial,
     }
 
+    gsap.killTweensOf(this.camera.instance.position)
     gsap.to(this.camera.instance.position, {
       duration: 1.5,
       x: districtWorldPosition.x,
@@ -1628,6 +1636,7 @@ export class World extends Mini3d {
       this.drillMapGroup = null
     }
     this.drillGroup = null
+    this.drillCenterLabel = null
 
     this.focusMapGroup.visible = true
     this.barGroup.visible = true
@@ -1640,10 +1649,17 @@ export class World extends Mini3d {
     this.particleGroup.visible = true
     this.rotateBorder1.visible = true
     this.rotateBorder2.visible = true
+    this.allProvinceLabel.forEach((label) => {
+      label.show()
+    })
+    this.otherLabel.forEach((label) => {
+      label.show()
+    })
 
     this.drilledDown = false
     this.drilledName = ""
 
+    gsap.killTweensOf(this.camera.instance.position)
     gsap.to(this.camera.instance.position, {
       duration: 1.5,
       x: -0.17427287762525134,
