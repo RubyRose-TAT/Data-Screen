@@ -1,4 +1,5 @@
 export default {
+  "赣州市": { adcode: "360700", enName: "GANZHOU CITY", center: [114.933, 25.829], cameraHeight: 13.6, cameraDistance: 20.7, ringOuterScale: 1, ringInnerScale: 1, focusScale: 1, labelOffset: [0, 0] },
   "章贡区": { adcode: "360702", enName: "ZHANGGONG", center: [114.938, 25.862], cameraHeight: 8, cameraDistance: 10, ringOuterScale: 0.28, ringInnerScale: 0.26, focusScale: 0.7, labelOffset: [0.7, 0.4] },
   "南康区": { adcode: "360703", enName: "NANKANG", center: [114.756, 25.661], cameraHeight: 8.5, cameraDistance: 10.5, ringOuterScale: 0.34, ringInnerScale: 0.32, focusScale: 0.8, labelOffset: [0.8, 0.4] },
   "赣县区": { adcode: "360704", enName: "GANXIAN", center: [115.017, 25.865], cameraHeight: 8.2, cameraDistance: 10.2, ringOuterScale: 0.3, ringInnerScale: 0.28, focusScale: 0.75, labelOffset: [0.75, 0.4] },
