@@ -1056,6 +1056,16 @@ export class World extends Mini3d {
     }
   }
 
+  setMapFocusTitle(name, enName, center, offset = [0, 0]) {
+    if (!this.mapFocusLabel) return
+    const [x, y] = this.geoProjection(center)
+    this.mapFocusLabel.init(
+      `<div class="other-label"><span>${name}</span><span>${enName}</span></div>`,
+      new Vector3(x + offset[0], -y + offset[1], 0.4)
+    )
+    this.mapFocusLabel.show()
+  }
+
   createRotateBorder() {
     let max = 18
     let rotationBorder1 = this.assets.instance.getResource("rotationBorder1")
@@ -1467,12 +1477,7 @@ export class World extends Mini3d {
       this.allProvinceLabel.forEach((label) => {
         label.hide()
       })
-      const [labelOffsetX, labelOffsetY] = districtInfo.labelOffset || [0.8, 0.4]
-      this.mapFocusLabel.init(
-        `<div class="other-label"><span>${name}</span><span>${districtInfo.enName || name}</span></div>`,
-        new Vector3(districtX + labelOffsetX, -districtY + labelOffsetY, 0.4)
-      )
-      this.mapFocusLabel.show()
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0])
 
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
@@ -1666,14 +1671,12 @@ export class World extends Mini3d {
     this.allProvinceLabel.forEach((label) => {
       label.show()
     })
-    this.mapFocusLabel.init(
-      `<div class="other-label"><span>${this.mapFocusLabelInfo.name}</span><span>${this.mapFocusLabelInfo.enName}</span></div>`,
-      (() => {
-        const [x, y] = this.geoProjection(this.mapFocusLabelInfo.center)
-        return new Vector3(x, -y, 0.4)
-      })()
+    this.setMapFocusTitle(
+      this.mapFocusLabelInfo.name,
+      this.mapFocusLabelInfo.enName,
+      this.mapFocusLabelInfo.center,
+      [0, 0]
     )
-    this.mapFocusLabel.show()
 
     this.drilledDown = false
     this.drilledName = ""
