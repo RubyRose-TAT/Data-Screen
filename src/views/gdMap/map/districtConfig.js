@@ -2,7 +2,7 @@ export default {
   "赣州市": { adcode: "360700", enName: "GANZHOU CITY", center: [114.933, 25.829], cameraHeight: 13.6, cameraDistance: 20.7, ringOuterScale: 1, ringInnerScale: 1, focusScale: 1, labelOffset: [0, 0] },
   "章贡区": { adcode: "360702", enName: "ZHANGGONG", center: [114.938, 25.862], cameraHeight: 8, cameraDistance: 10, ringOuterScale: 0.28, ringInnerScale: 0.26, focusScale: 0.7, labelOffset: [0.7, 0.4] },
   "南康区": { adcode: "360703", enName: "NANKANG", center: [114.756, 25.661], cameraHeight: 8.5, cameraDistance: 10.5, ringOuterScale: 0.34, ringInnerScale: 0.32, focusScale: 0.8, labelOffset: [0.8, 0.4] },
-  "赣县区": { adcode: "360704", enName: "GANXIAN", center: [115.017, 25.865], cameraHeight: 8.2, cameraDistance: 10.2, ringOuterScale: 0.3, ringInnerScale: 0.28, focusScale: 0.75, labelOffset: [0.75, 0.4] },
+  "赣县区": { adcode: "360704", enName: "GANXIAN", center: [115.018, 25.865], cameraHeight: 8.2, cameraDistance: 10.2, ringOuterScale: 0.3, ringInnerScale: 0.28, focusScale: 0.75, labelOffset: [0.75, 0.4] },
   "信丰县": { adcode: "360722", enName: "XINFENG", center: [114.922, 25.386], cameraHeight: 9.5, cameraDistance: 12, ringOuterScale: 0.42, ringInnerScale: 0.39, focusScale: 0.9, labelOffset: [0.9, 0.45] },
   "大余县": { adcode: "360723", enName: "DAYU", center: [114.362, 25.401], cameraHeight: 9.3, cameraDistance: 11.8, ringOuterScale: 0.4, ringInnerScale: 0.37, focusScale: 0.88, labelOffset: [0.85, 0.45] },
   "上犹县": { adcode: "360724", enName: "SHANGYOU", center: [114.54, 25.8], cameraHeight: 9, cameraDistance: 11.4, ringOuterScale: 0.37, ringInnerScale: 0.34, focusScale: 0.84, labelOffset: [0.8, 0.45] },
