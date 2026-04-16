@@ -1059,11 +1059,11 @@ export class World extends Mini3d {
     }
   }
 
-  setMapFocusTitle(name, enName, center, offset = [0, 0]) {
+  setMapFocusTitle(name, enName, center, offset = [0, 0], isDistrict = false) {
     if (!this.mapFocusLabel) return
     const [x, y] = this.geoProjection(center)
     this.mapFocusLabel.init(
-      `<div class="other-label"><span>${name}</span><span>${enName}</span></div>`,
+      `<div class="other-label ${isDistrict ? "drill-title" : ""}"><span>${name}</span><span>${enName}</span></div>`,
       new Vector3(x + offset[0], -y + offset[1], 0.4)
     )
     const element = this.mapFocusLabel.element?.querySelector(".other-label")
@@ -1523,7 +1523,7 @@ export class World extends Mini3d {
       this.allProvinceLabel.forEach((label) => {
         label.hide()
       })
-      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0])
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0], true)
 
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
