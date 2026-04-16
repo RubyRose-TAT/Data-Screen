@@ -47,6 +47,7 @@ import {geoMercator} from "d3-geo"
 import labelIcon from "@/assets/texture/label-icon.png"
 import chinaData from "./map/chinaData"
 import provincesData from "./map/provincesData"
+import districtConfig from "./map/districtConfig"
 import scatterData from "./map/scatter"
 import infoData from "./map/infoData"
 import gsap from "gsap"
@@ -115,13 +116,7 @@ export class World extends Mini3d {
       center: [114.933, 25.829],
       type: 'city'
     }
-    this.districtConfig = provincesData.reduce((acc, item) => {
-      acc[item.name] = {
-        center: item.center,
-        enName: item.enName.toUpperCase(),
-      }
-      return acc
-    }, {})
+    this.districtConfig = districtConfig
     // 是否点击
     this.clicked = false
     // 下钻状态
@@ -1414,19 +1409,12 @@ export class World extends Mini3d {
   }
 
   async drillDown(name) {
-    const districtAdcodeMap = {
-      "章贡区": "360702", "南康区": "360703", "赣县区": "360704",
-      "信丰县": "360722", "大余县": "360723", "上犹县": "360724",
-      "崇义县": "360725", "安远县": "360726", "定南县": "360728",
-      "全南县": "360729", "宁都县": "360730", "于都县": "360731",
-      "兴国县": "360732", "会昌县": "360733", "寻乌县": "360734",
-      "石城县": "360735", "瑞金市": "360781", "龙南市": "360783",
-    }
-    const adcode = districtAdcodeMap[name]
-    if (!adcode) {
+    const districtInfo = this.districtConfig[name]
+    if (!districtInfo?.adcode) {
       console.warn("未找到区县 adcode:", name)
       return
     }
+    const adcode = districtInfo.adcode
 
     this.drilledDown = true
     this.drilledName = name
@@ -1439,21 +1427,14 @@ export class World extends Mini3d {
       }
       const geoDataText = await resp.text()
       const geoDataJSON = JSON.parse(geoDataText)
-      const districtInfo = this.districtConfig[name] || {}
-      const districtCenter = this.getGeoJSONCenter(geoDataJSON)
-      const [districtX, districtY] = this.geoProjection([districtCenter.lng, districtCenter.lat])
+      const [districtX, districtY] = this.geoProjection(districtInfo.center)
       const districtWorldPosition = new Vector3(districtX, 0, -districtY)
-      const { minX, minY, maxX, width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
-      const districtSpan = Math.max(width, height)
-      const ringCenterX = (minX + maxX) / 2
-      const ringCenterY = (minY + (minY + height)) / 2
-      const outerBaseDiameter = 18 * 1.178
-      const innerBaseDiameter = 18 * 1.116
-      const targetDiameter = districtSpan * 1.35
-      const outerScale = Math.max(0.2, Math.min(0.9, targetDiameter / outerBaseDiameter))
-      const innerScale = Math.max(0.2, Math.min(0.9, (targetDiameter * 0.95) / innerBaseDiameter))
-      const cameraHeight = Math.max(7, Math.min(14, districtSpan * 0.7))
-      const cameraDistance = Math.max(9, Math.min(18, districtSpan * 1.2))
+      const ringCenterX = districtX
+      const ringCenterY = districtY
+      const outerScale = districtInfo.ringOuterScale
+      const innerScale = districtInfo.ringInnerScale
+      const cameraHeight = districtInfo.cameraHeight
+      const cameraDistance = districtInfo.cameraDistance
 
       // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
@@ -1479,9 +1460,10 @@ export class World extends Mini3d {
       this.allProvinceLabel.forEach((label) => {
         label.hide()
       })
+      const [labelOffsetX, labelOffsetY] = districtInfo.labelOffset || [0.8, 0.4]
       this.mapFocusLabel.init(
         `<div class="other-label"><span>${name}</span><span>${districtInfo.enName || name}</span></div>`,
-        new Vector3(maxX + 0.8, -minY + 0.4, 0.4)
+        new Vector3(districtX + labelOffsetX, -districtY + labelOffsetY, 0.4)
       )
       this.mapFocusLabel.show()
 
@@ -1605,7 +1587,7 @@ export class World extends Mini3d {
     drillMapTop.setParent(this.drillMapGroup)
     drillLine.setParent(this.drillMapGroup)
     const drillFocus = new Focus(this, {color1: 0xbdfdfd, color2: 0xbdfdfd})
-    const focusScale = Math.max(0.5, Math.min(1.1, districtSpan / 10))
+    const focusScale = districtInfo.focusScale
     drillFocus.position.set(ringCenterX, -ringCenterY, this.depth + 0.44)
     drillFocus.scale.set(focusScale, focusScale, focusScale)
     this.drillMapGroup.add(drillFocus)
