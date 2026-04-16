@@ -1405,6 +1405,15 @@ export class World extends Mini3d {
       this.quanGroup.visible = false
       this.labelGroup.visible = false
       this.InfoPointGroup.visible = false
+      this.flyLineGroup.visible = false
+      this.flyLineFocusGroup.visible = false
+      this.scatterGroup.visible = false
+      this.particleGroup.visible = false
+      this.rotateBorder1.visible = false
+      this.rotateBorder2.visible = false
+      this.infoLabelElement.forEach((label) => {
+        label.visible = false
+      })
 
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
@@ -1525,6 +1534,19 @@ export class World extends Mini3d {
     drillMap.setParent(this.drillMapGroup)
     drillMapTop.setParent(this.drillMapGroup)
     drillLine.setParent(this.drillMapGroup)
+
+    const drillCenterLabel = this.label3d.create("", "map-label4", true)
+    drillCenterLabel.init(
+      `
+      <div class="map-label-wrap">
+        <div class="areaName">${name}</div>
+      </div>
+      `,
+      new Vector3(0, 0, this.depth + 1.8)
+    )
+    this.label3d.setLabelStyle(drillCenterLabel, 0.01, "x")
+    drillCenterLabel.setParent(this.drillMapGroup)
+
     this.scene.add(this.drillMapGroup)
 
     this.drillGroup = {
@@ -1567,6 +1589,12 @@ export class World extends Mini3d {
     this.quanGroup.visible = true
     this.labelGroup.visible = true
     this.InfoPointGroup.visible = true
+    this.flyLineGroup.visible = true
+    this.flyLineFocusGroup.visible = true
+    this.scatterGroup.visible = true
+    this.particleGroup.visible = true
+    this.rotateBorder1.visible = true
+    this.rotateBorder2.visible = true
 
     this.drilledDown = false
     this.drilledName = ""
