@@ -1354,17 +1354,19 @@ export class World extends Mini3d {
       let coords = []
 
       if (geom.type === "Polygon") {
-        coords = geom.coordinates[0]
+        coords = [geom.coordinates[0]]
       } else if (geom.type === "MultiPolygon") {
-        coords = geom.coordinates[0][0]
+        coords = geom.coordinates.map((polygon) => polygon[0])
       } else {
         return
       }
 
-      coords.forEach(([lng, lat]) => {
-        sumLng += lng
-        sumLat += lat
-        total++
+      coords.forEach((outerRing) => {
+        outerRing.forEach(([lng, lat]) => {
+          sumLng += lng
+          sumLat += lat
+          total++
+        })
       })
     })
 
