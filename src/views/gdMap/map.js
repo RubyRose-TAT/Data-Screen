@@ -1371,6 +1371,40 @@ export class World extends Mini3d {
     return [sumLng / total, sumLat / total]
   }
 
+  getGeoJSONProjectedBounds(geoJSON) {
+    let minX = Infinity
+    let minY = Infinity
+    let maxX = -Infinity
+    let maxY = -Infinity
+
+    const visitCoords = (coordinates) => {
+      coordinates.forEach(([lng, lat]) => {
+        const [x, y] = this.geoProjection([lng, lat])
+        minX = Math.min(minX, x)
+        minY = Math.min(minY, y)
+        maxX = Math.max(maxX, x)
+        maxY = Math.max(maxY, y)
+      })
+    }
+
+    geoJSON.features.forEach((feature) => {
+      const geom = feature.geometry
+      if (geom.type === "Polygon") {
+        geom.coordinates.forEach((ring) => visitCoords(ring))
+      } else if (geom.type === "MultiPolygon") {
+        geom.coordinates.forEach((polygon) => {
+          polygon.forEach((ring) => visitCoords(ring))
+        })
+      }
+    })
+
+    if (!isFinite(minX) || !isFinite(minY) || !isFinite(maxX) || !isFinite(maxY)) {
+      return { width: 8, height: 8 }
+    }
+
+    return { width: maxX - minX, height: maxY - minY }
+  }
+
   async drillDown(name) {
     const districtAdcodeMap = {
       "章贡区": "360702", "南康区": "360703", "赣县区": "360704",
@@ -1397,9 +1431,16 @@ export class World extends Mini3d {
       }
       const geoDataText = await resp.text()
       const geoDataJSON = JSON.parse(geoDataText)
-      const drillProjectionCenter = this.getGeoJSONCenter(geoDataJSON)
+      const districtInfo = provincesData.find((item) => item.name === name)
+      const districtCenter = districtInfo?.center || this.getGeoJSONCenter(geoDataJSON)
+      const [districtX, districtY] = this.geoProjection(districtCenter)
+      const districtWorldPosition = new Vector3(districtX, 0, -districtY)
+      const { width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
+      const districtSpan = Math.max(width, height)
+      const cameraHeight = Math.max(7, Math.min(14, districtSpan * 0.7))
+      const cameraDistance = Math.max(9, Math.min(18, districtSpan * 1.2))
 
-      // 下钻后使用当前区县几何中心作为投影中心
+      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
       this.barGroup.visible = false
       this.quanGroup.visible = false
@@ -1493,7 +1534,7 @@ export class World extends Mini3d {
     }
 
     const drillMap = new ExtrudeMap(this, {
-      geoProjectionCenter: drillProjectionCenter,
+      geoProjectionCenter: this.geoProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       position: new Vector3(0, 0, 0.11),
       data: geoDataText,
@@ -1511,7 +1552,7 @@ export class World extends Mini3d {
     })
 
     const drillMapTop = new BaseMap(this, {
-      geoProjectionCenter: drillProjectionCenter,
+      geoProjectionCenter: this.geoProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       position: new Vector3(0, 0, this.depth + 0.22),
       data: geoDataText,
@@ -1523,7 +1564,7 @@ export class World extends Mini3d {
       color: 0xffffff, opacity: 1, transparent: true, fog: false,
     })
     const drillLine = new Line(this, {
-      geoProjectionCenter: drillProjectionCenter,
+      geoProjectionCenter: this.geoProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       data: geoDataText,
       material: drillLineMaterial,
@@ -1535,16 +1576,14 @@ export class World extends Mini3d {
     drillMapTop.setParent(this.drillMapGroup)
     drillLine.setParent(this.drillMapGroup)
 
-    const drillCenterLabel = this.label3d.create("", "map-label4", true)
+    const drillCenterLabel = this.label3d.create("", "map-label", false)
     drillCenterLabel.init(
       `
-      <div class="map-label-wrap">
-        <div class="areaName">${name}</div>
-      </div>
+      <div class="other-label"><span>${name}</span><span>${(districtInfo?.enName || name).toUpperCase()}</span></div>
       `,
-      new Vector3(0, 0, this.depth + 1.8)
+      new Vector3(districtX + 0.6, -districtY + 0.6, this.depth + 0.5)
     )
-    this.label3d.setLabelStyle(drillCenterLabel, 0.01, "x")
+    this.label3d.setLabelStyle(drillCenterLabel, 0.015, "x")
     drillCenterLabel.setParent(this.drillMapGroup)
 
     this.scene.add(this.drillMapGroup)
@@ -1556,10 +1595,16 @@ export class World extends Mini3d {
 
     gsap.to(this.camera.instance.position, {
       duration: 1.5,
-      x: -0.17427287762525134,
-      y: 13.678992786206543,
-      z: 20.688611202093714,
+      x: districtWorldPosition.x,
+      y: cameraHeight,
+      z: districtWorldPosition.z + cameraDistance,
       ease: "circ.out",
+      onUpdate: () => {
+        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+      },
+      onComplete: () => {
+        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+      },
     })
     gsap.to(drillTopMaterial, { duration: 1, opacity: 1, delay: 0.5, ease: "circ.out" })
     gsap.to(sideMaterial, {
@@ -1605,6 +1650,12 @@ export class World extends Mini3d {
       y: 13.678992786206543,
       z: 20.688611202093714,
       ease: "circ.out",
+      onUpdate: () => {
+        this.camera.instance.lookAt(0, 0, 0)
+      },
+      onComplete: () => {
+        this.camera.instance.lookAt(0, 0, 0)
+      },
     })
 
     emitter.$emit("mapDrillUp")
