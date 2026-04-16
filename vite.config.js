@@ -44,14 +44,6 @@ export default ({ mode }) => {
       target: 'es2015',
       cssTarget: 'chrome80',
       outDir: OUTPUT_DIR,
-      terserOptions: {
-        compress: {
-          // keep_infinity: true,
-          // // Used to delete console in production environment
-          // drop_console: VITE_DROP_CONSOLE,
-          // drop_debugger: true,
-        },
-      },
       // Turning off brotliSize display can slightly reduce packaging time
       reportCompressedSize: false,
       chunkSizeWarningLimit: 2000,

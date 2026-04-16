@@ -1340,6 +1340,37 @@ export class World extends Mini3d {
     return geoMercator().center(this.geoProjectionCenter).scale(this.geoProjectionScale).translate([0, 0])(args)
   }
 
+  getGeoJSONCenter(geoJSON) {
+    let total = 0
+    let sumLng = 0
+    let sumLat = 0
+
+    geoJSON.features.forEach((feature) => {
+      const geom = feature.geometry
+      let coords = []
+
+      if (geom.type === "Polygon") {
+        coords = geom.coordinates[0]
+      } else if (geom.type === "MultiPolygon") {
+        coords = geom.coordinates[0][0]
+      } else {
+        return
+      }
+
+      coords.forEach(([lng, lat]) => {
+        sumLng += lng
+        sumLat += lat
+        total++
+      })
+    })
+
+    if (total === 0) {
+      return this.geoProjectionCenter
+    }
+
+    return [sumLng / total, sumLat / total]
+  }
+
   async drillDown(name) {
     const districtAdcodeMap = {
       "章贡区": "360702", "南康区": "360703", "赣县区": "360704",
@@ -1360,15 +1391,15 @@ export class World extends Mini3d {
 
     try {
       const base_url = import.meta.env.BASE_URL
-      console.log("正在加载区县 geojson:", base_url + "assets/geojson/" + adcode + ".geojson")
       const resp = await fetch(base_url + "assets/geojson/" + adcode + ".geojson")
       if (!resp.ok) {
         throw new Error("HTTP error: " + resp.status)
       }
       const geoDataText = await resp.text()
-      console.log("geojson 加载成功")
-      
-      // 直接使用市级地图的投影中心和缩放
+      const geoDataJSON = JSON.parse(geoDataText)
+      const drillProjectionCenter = this.getGeoJSONCenter(geoDataJSON)
+
+      // 下钻后使用当前区县几何中心作为投影中心
       this.focusMapGroup.visible = false
       this.barGroup.visible = false
       this.quanGroup.visible = false
@@ -1453,7 +1484,7 @@ export class World extends Mini3d {
     }
 
     const drillMap = new ExtrudeMap(this, {
-      geoProjectionCenter: this.geoProjectionCenter,
+      geoProjectionCenter: drillProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       position: new Vector3(0, 0, 0.11),
       data: geoDataText,
@@ -1471,7 +1502,7 @@ export class World extends Mini3d {
     })
 
     const drillMapTop = new BaseMap(this, {
-      geoProjectionCenter: this.geoProjectionCenter,
+      geoProjectionCenter: drillProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       position: new Vector3(0, 0, this.depth + 0.22),
       data: geoDataText,
@@ -1483,7 +1514,7 @@ export class World extends Mini3d {
       color: 0xffffff, opacity: 1, transparent: true, fog: false,
     })
     const drillLine = new Line(this, {
-      geoProjectionCenter: this.geoProjectionCenter,
+      geoProjectionCenter: drillProjectionCenter,
       geoProjectionScale: this.geoProjectionScale,
       data: geoDataText,
       material: drillLineMaterial,
