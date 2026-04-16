@@ -1445,6 +1445,13 @@ export class World extends Mini3d {
       const districtWorldPosition = new Vector3(districtX, 0, -districtY)
       const { minX, minY, maxX, width, height } = this.getGeoJSONProjectedBounds(geoDataJSON)
       const districtSpan = Math.max(width, height)
+      const ringCenterX = (minX + maxX) / 2
+      const ringCenterY = (minY + (minY + height)) / 2
+      const outerBaseDiameter = 18 * 1.178
+      const innerBaseDiameter = 18 * 1.116
+      const targetDiameter = districtSpan * 1.35
+      const outerScale = Math.max(0.2, Math.min(0.9, targetDiameter / outerBaseDiameter))
+      const innerScale = Math.max(0.2, Math.min(0.9, (targetDiameter * 0.95) / innerBaseDiameter))
       const cameraHeight = Math.max(7, Math.min(14, districtSpan * 0.7))
       const cameraDistance = Math.max(9, Math.min(18, districtSpan * 1.2))
 
@@ -1460,10 +1467,12 @@ export class World extends Mini3d {
       this.particleGroup.visible = false
       this.rotateBorder1.visible = true
       this.rotateBorder2.visible = true
-      this.rotateBorder1.position.x = districtX
-      this.rotateBorder1.position.z = -districtY
-      this.rotateBorder2.position.x = districtX
-      this.rotateBorder2.position.z = -districtY
+      this.rotateBorder1.position.x = ringCenterX
+      this.rotateBorder1.position.z = -ringCenterY
+      this.rotateBorder2.position.x = ringCenterX
+      this.rotateBorder2.position.z = -ringCenterY
+      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
+      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
       this.infoLabelElement.forEach((label) => {
         label.visible = false
       })
@@ -1658,6 +1667,8 @@ export class World extends Mini3d {
     this.rotateBorder1.position.z = 0
     this.rotateBorder2.position.x = 0
     this.rotateBorder2.position.z = 0
+    this.rotateBorder1.scale.set(1, 1, 1)
+    this.rotateBorder2.scale.set(1, 1, 1)
     this.allProvinceLabel.forEach((label) => {
       label.show()
     })
