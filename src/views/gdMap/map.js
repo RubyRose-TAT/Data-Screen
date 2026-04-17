@@ -124,6 +124,7 @@ export class World extends Mini3d {
     this.drilledName = ""
     this.drillGroup = null
     this.drillMapGroup = null
+    this.drillCenterMarker = null
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
     // 雾
@@ -819,6 +820,51 @@ export class World extends Mini3d {
     mesh2.rotateY((Math.PI / 180) * 60)
     mesh3.rotateY((Math.PI / 180) * 120)
     return [mesh, mesh2, mesh3]
+  }
+
+  createDrillCenterMarker(centerX, centerZ, scale = 1) {
+    const markerGroup = new Group()
+    const beamHeight = 2.2 * scale
+    const beamGeometry = new PlaneGeometry(0.18 * scale, beamHeight)
+    beamGeometry.translate(0, beamHeight / 2, 0)
+    const beamTexture = this.assets.instance.getResource("huiguang")
+    const beamMaterial = new MeshBasicMaterial({
+      color: 0xdfffff,
+      map: beamTexture,
+      transparent: true,
+      opacity: 0.72,
+      depthWrite: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      fog: false,
+    })
+    const beam1 = new Mesh(beamGeometry, beamMaterial)
+    const beam2 = beam1.clone()
+    beam2.rotation.y = Math.PI / 2
+    markerGroup.add(beam1, beam2)
+
+    const ringTexture = this.assets.instance.getResource("guangquan2")
+    const ringGeometry = new PlaneGeometry(0.6 * scale, 0.6 * scale)
+    const ringMaterial = new MeshBasicMaterial({
+      color: 0xffffff,
+      map: ringTexture,
+      alphaMap: ringTexture,
+      transparent: true,
+      opacity: 0.95,
+      depthWrite: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      fog: false,
+    })
+    const ring = new Mesh(ringGeometry, ringMaterial)
+    ring.rotation.x = -Math.PI / 2
+    ring.position.y = 0.03
+    markerGroup.add(ring)
+
+    markerGroup.position.set(centerX, this.depth + 0.1, centerZ)
+    markerGroup.renderOrder = 99
+    this.scene.add(markerGroup)
+    return markerGroup
   }
 
   createQuan(position, index) {
@@ -1694,6 +1740,8 @@ export class World extends Mini3d {
     drillLine.setParent(this.drillMapGroup)
 
     this.scene.add(this.drillMapGroup)
+    const markerScale = Math.max((districtInfo.focusScale || 0.9) * 0.55, 0.35)
+    this.drillCenterMarker = this.createDrillCenterMarker(ringCenterX, ringCenterZ, markerScale)
 
     this.drillGroup = {
       drillMap, drillMapTop, drillLine,
@@ -1734,6 +1782,10 @@ export class World extends Mini3d {
     if (this.drillMapGroup) {
       this.scene.remove(this.drillMapGroup)
       this.drillMapGroup = null
+    }
+    if (this.drillCenterMarker) {
+      this.scene.remove(this.drillCenterMarker)
+      this.drillCenterMarker = null
     }
     this.drillGroup = null
     this.focusMapGroup.visible = true
