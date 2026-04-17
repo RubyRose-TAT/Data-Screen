@@ -134,6 +134,7 @@ export class World extends Mini3d {
     this.drillCenterMarker = null
     this.drillVisualCache = new Map()
     this.drillVisualLoading = new Map()
+    this.districtPreloadStarted = false
     this.idlePrewarmTimer = null
     this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
@@ -155,7 +156,6 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
-    this.preloadDistrictGeoJSON()
   }
 
   init() {
@@ -321,6 +321,10 @@ export class World extends Mini3d {
           onComplete: () => {
             this.flyLineFocusGroup.visible = true
             emitter.$emit("mapPlayComplete")
+            if (!this.districtPreloadStarted) {
+              this.districtPreloadStarted = true
+              this.preloadDistrictGeoJSON()
+            }
             this.scheduleIdlePrewarm()
           },
         },
@@ -1784,6 +1788,10 @@ export class World extends Mini3d {
 
     this.drilledDown = true
     this.drilledName = name
+    const shouldShowDrillLoading = !this.drillVisualCache.has(adcode)
+    if (shouldShowDrillLoading) {
+      emitter.$emit("mapDrillLoading", true)
+    }
 
     try {
       const geoData = await this.loadDistrictGeoJSON(adcode)
@@ -1875,6 +1883,10 @@ export class World extends Mini3d {
       console.error("下钻失败:", err)
       this.drilledDown = false
       this.drilledName = ""
+    } finally {
+      if (shouldShowDrillLoading) {
+        emitter.$emit("mapDrillLoading", false)
+      }
     }
   }
 

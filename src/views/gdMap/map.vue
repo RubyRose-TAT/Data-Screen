@@ -5,6 +5,7 @@
       <span class="drill-back-icon">←</span>
       <span>返回上级</span>
     </div>
+    <div v-if="drillLoading" class="drill-loading">县级地图加载中...</div>
   </div>
 </template>
 <script setup>
@@ -14,10 +15,12 @@ import emitter from "@/utils/emitter";
 const worldInstance = shallowRef(null);
 const drilledDown = ref(false);
 const drilledName = ref("");
+const drillLoading = ref(false);
 onMounted(() => {
   emitter.$on("loadMap", loadMap);
   emitter.$on("mapDrillDown", onDrillDown);
   emitter.$on("mapDrillUp", onDrillUp);
+  emitter.$on("mapDrillLoading", onDrillLoading);
 });
 onBeforeUnmount(() => {
   if (worldInstance.value) {
@@ -27,6 +30,7 @@ onBeforeUnmount(() => {
   emitter.$off("loadMap", loadMap);
   emitter.$off("mapDrillDown", onDrillDown);
   emitter.$off("mapDrillUp", onDrillUp);
+  emitter.$off("mapDrillLoading", onDrillLoading);
 });
 function loadMap(assets) {
   worldInstance.value = new World(document.getElementById("canvasMap"), assets);
@@ -49,6 +53,9 @@ function onDrillDown({ name }) {
 function onDrillUp() {
   drilledDown.value = false;
   drilledName.value = "";
+}
+function onDrillLoading(loading) {
+  drillLoading.value = Boolean(loading);
 }
 defineExpose({
   loadMap,
@@ -100,6 +107,21 @@ $drill-title-en-size: 9px;
       font-size: 16px;
       font-weight: bold;
     }
+  }
+
+  .drill-loading {
+    position: absolute;
+    top: 220px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 2001;
+    padding: 8px 18px;
+    color: #d5f6ff;
+    font-size: 13px;
+    letter-spacing: 1px;
+    background: rgba(8, 33, 58, 0.72);
+    border: 1px solid rgba(115, 208, 255, 0.45);
+    border-radius: 4px;
   }
 
   .info-point {
