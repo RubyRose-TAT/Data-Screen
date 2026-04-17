@@ -125,6 +125,8 @@ export class World extends Mini3d {
     this.drillGroup = null
     this.drillMapGroup = null
     this.drillCenterMarker = null
+    this.drillVisualCache = new Map()
+    this.drillVisualLoading = new Map()
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
     // 雾
@@ -782,6 +784,8 @@ export class World extends Mini3d {
         if (!objectsHover.includes(event.target.parent)) {
           objectsHover.push(event.target.parent)
         }
+        const hoverName = event.target.parent?.userData?.name
+        this.warmupDrillVisual(hoverName)
         document.body.style.cursor = "pointer"
         move(event.target.parent)
       })
@@ -1521,111 +1525,10 @@ export class World extends Mini3d {
     }, 1200)
   }
 
-  getGeoJSONCenter(geojson) {
-    const bounds = {
-      minLng: Number.POSITIVE_INFINITY,
-      maxLng: Number.NEGATIVE_INFINITY,
-      minLat: Number.POSITIVE_INFINITY,
-      maxLat: Number.NEGATIVE_INFINITY,
-    }
-
-    const updateBounds = (lng, lat) => {
-      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
-      bounds.minLng = Math.min(bounds.minLng, lng)
-      bounds.maxLng = Math.max(bounds.maxLng, lng)
-      bounds.minLat = Math.min(bounds.minLat, lat)
-      bounds.maxLat = Math.max(bounds.maxLat, lat)
-    }
-
-    const visitCoords = (coords) => {
-      if (!Array.isArray(coords) || coords.length === 0) return
-      if (typeof coords[0] === "number" && typeof coords[1] === "number") {
-        updateBounds(coords[0], coords[1])
-        return
-      }
-      coords.forEach((item) => visitCoords(item))
-    }
-
-    const features = Array.isArray(geojson?.features) ? geojson.features : []
-    features.forEach((feature) => {
-      visitCoords(feature?.geometry?.coordinates)
-    })
-
-    const isValid =
-      Number.isFinite(bounds.minLng) &&
-      Number.isFinite(bounds.maxLng) &&
-      Number.isFinite(bounds.minLat) &&
-      Number.isFinite(bounds.maxLat)
-
-    if (!isValid) return null
-    return [
-      (bounds.minLng + bounds.maxLng) / 2,
-      (bounds.minLat + bounds.maxLat) / 2,
-    ]
-  }
-
-  async drillDown(name) {
-    const districtInfo = this.districtConfig[name]
-    if (!districtInfo?.adcode) {
-      console.warn("未找到区县 adcode:", name)
-      return
-    }
-    const adcode = districtInfo.adcode
-
-    this.drilledDown = true
-    this.drilledName = name
-
-    try {
-      const geoData = await this.loadDistrictGeoJSON(adcode)
-      const geoDataText = geoData.text
-      const geoDataJSON = geoData.json
-      // 优先使用区县配置中的标记中心点（业务标注中心），避免几何包围盒中心带来的偏移
-      const districtCenter = districtInfo.center || this.getGeoJSONCenter(geoDataJSON)
-      const [districtX, districtY] = this.geoProjection(districtCenter)
-      // 县级地图面数据在构建后经过 group 旋转，落到场景坐标时对应的是 +districtY
-      const districtWorldPosition = new Vector3(districtX, 0, districtY)
-      const ringCenterX = districtX
-      const ringCenterZ = districtY
-      const outerScale = districtInfo.ringOuterScale
-      const innerScale = districtInfo.ringInnerScale
-      // 下钻镜头统一拉近，避免县级地图看起来过小
-      const drillZoomScale = 0.62
-      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * drillZoomScale, 4.8)
-      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * drillZoomScale, 5.5)
-
-      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
-      this.focusMapGroup.visible = false
-      this.barGroup.visible = false
-      this.quanGroup.visible = false
-      this.labelGroup.visible = true
-      this.InfoPointGroup.visible = false
-      this.flyLineGroup.visible = false
-      this.flyLineFocusGroup.visible = false
-      this.scatterGroup.visible = false
-      this.particleGroup.visible = false
-      this.rotateBorder1.visible = true
-      this.rotateBorder2.visible = true
-      this.rotateBorder1.position.x = ringCenterX
-      this.rotateBorder1.position.z = ringCenterZ
-      this.rotateBorder2.position.x = ringCenterX
-      this.rotateBorder2.position.z = ringCenterZ
-      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
-      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
-      if (this.diffuseMesh) {
-        this.diffuseMesh.position.x = ringCenterX
-        this.diffuseMesh.position.z = ringCenterZ
-      }
-      this.infoLabelElement.forEach((label) => {
-        label.visible = false
-      })
-      this.allProvinceLabel.forEach((label) => {
-        label.hide()
-      })
-      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
-
-      this.drillMapGroup = new Group()
-      this.drillMapGroup.rotation.x = -Math.PI / 2
-      this.drillMapGroup.position.set(0, 0.2, 0)
+  buildDrillVisual(geoDataText) {
+    const drillMapGroup = new Group()
+    drillMapGroup.rotation.x = -Math.PI / 2
+    drillMapGroup.position.set(0, 0.2, 0)
 
     const drillTopMaterial = new MeshLambertMaterial({
       color: 0xffffff, transparent: true, opacity: 0, fog: false, side: DoubleSide,
@@ -1739,9 +1642,142 @@ export class World extends Mini3d {
     })
     drillLine.lineGroup.position.z += this.depth + 0.23
 
-    drillMap.setParent(this.drillMapGroup)
-    drillMapTop.setParent(this.drillMapGroup)
-    drillLine.setParent(this.drillMapGroup)
+    drillMap.setParent(drillMapGroup)
+    drillMapTop.setParent(drillMapGroup)
+    drillLine.setParent(drillMapGroup)
+    return { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial }
+  }
+
+  warmupDrillVisual(name) {
+    const districtInfo = this.districtConfig[name]
+    const adcode = districtInfo?.adcode
+    if (!adcode) return
+    if (this.drillVisualCache.has(adcode) || this.drillVisualLoading.has(adcode)) return
+
+    const task = this.loadDistrictGeoJSON(adcode)
+      .then((geoData) => {
+        if (!this.drillVisualCache.has(adcode)) {
+          const visual = this.buildDrillVisual(geoData.text)
+          this.drillVisualCache.set(adcode, visual)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.drillVisualLoading.delete(adcode)
+      })
+
+    this.drillVisualLoading.set(adcode, task)
+  }
+
+  getGeoJSONCenter(geojson) {
+    const bounds = {
+      minLng: Number.POSITIVE_INFINITY,
+      maxLng: Number.NEGATIVE_INFINITY,
+      minLat: Number.POSITIVE_INFINITY,
+      maxLat: Number.NEGATIVE_INFINITY,
+    }
+
+    const updateBounds = (lng, lat) => {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+      bounds.minLng = Math.min(bounds.minLng, lng)
+      bounds.maxLng = Math.max(bounds.maxLng, lng)
+      bounds.minLat = Math.min(bounds.minLat, lat)
+      bounds.maxLat = Math.max(bounds.maxLat, lat)
+    }
+
+    const visitCoords = (coords) => {
+      if (!Array.isArray(coords) || coords.length === 0) return
+      if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+        updateBounds(coords[0], coords[1])
+        return
+      }
+      coords.forEach((item) => visitCoords(item))
+    }
+
+    const features = Array.isArray(geojson?.features) ? geojson.features : []
+    features.forEach((feature) => {
+      visitCoords(feature?.geometry?.coordinates)
+    })
+
+    const isValid =
+      Number.isFinite(bounds.minLng) &&
+      Number.isFinite(bounds.maxLng) &&
+      Number.isFinite(bounds.minLat) &&
+      Number.isFinite(bounds.maxLat)
+
+    if (!isValid) return null
+    return [
+      (bounds.minLng + bounds.maxLng) / 2,
+      (bounds.minLat + bounds.maxLat) / 2,
+    ]
+  }
+
+  async drillDown(name) {
+    const districtInfo = this.districtConfig[name]
+    if (!districtInfo?.adcode) {
+      console.warn("未找到区县 adcode:", name)
+      return
+    }
+    const adcode = districtInfo.adcode
+
+    this.drilledDown = true
+    this.drilledName = name
+
+    try {
+      const geoData = await this.loadDistrictGeoJSON(adcode)
+      const geoDataText = geoData.text
+      const geoDataJSON = geoData.json
+      // 优先使用区县配置中的标记中心点（业务标注中心），避免几何包围盒中心带来的偏移
+      const districtCenter = districtInfo.center || this.getGeoJSONCenter(geoDataJSON)
+      const [districtX, districtY] = this.geoProjection(districtCenter)
+      // 县级地图面数据在构建后经过 group 旋转，落到场景坐标时对应的是 +districtY
+      const districtWorldPosition = new Vector3(districtX, 0, districtY)
+      const ringCenterX = districtX
+      const ringCenterZ = districtY
+      const outerScale = districtInfo.ringOuterScale
+      const innerScale = districtInfo.ringInnerScale
+      // 下钻镜头统一拉近，避免县级地图看起来过小
+      const drillZoomScale = 0.62
+      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * drillZoomScale, 4.8)
+      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * drillZoomScale, 5.5)
+
+      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
+      this.focusMapGroup.visible = false
+      this.barGroup.visible = false
+      this.quanGroup.visible = false
+      this.labelGroup.visible = true
+      this.InfoPointGroup.visible = false
+      this.flyLineGroup.visible = false
+      this.flyLineFocusGroup.visible = false
+      this.scatterGroup.visible = false
+      this.particleGroup.visible = false
+      this.rotateBorder1.visible = true
+      this.rotateBorder2.visible = true
+      this.rotateBorder1.position.x = ringCenterX
+      this.rotateBorder1.position.z = ringCenterZ
+      this.rotateBorder2.position.x = ringCenterX
+      this.rotateBorder2.position.z = ringCenterZ
+      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
+      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
+      if (this.diffuseMesh) {
+        this.diffuseMesh.position.x = ringCenterX
+        this.diffuseMesh.position.z = ringCenterZ
+      }
+      this.infoLabelElement.forEach((label) => {
+        label.visible = false
+      })
+      this.allProvinceLabel.forEach((label) => {
+        label.hide()
+      })
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
+
+    let visual = this.drillVisualCache.get(adcode)
+    if (!visual) {
+      visual = this.buildDrillVisual(geoDataText)
+      this.drillVisualCache.set(adcode, visual)
+    }
+    const { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial } = visual
+    this.drillMapGroup = drillMapGroup
 
     this.scene.add(this.drillMapGroup)
     const markerScale = 0.95
@@ -1766,11 +1802,13 @@ export class World extends Mini3d {
         this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
       },
     })
-    gsap.to(drillTopMaterial, { duration: 1, opacity: 1, delay: 0.5, ease: "circ.out" })
-    gsap.to(sideMaterial, {
-      duration: 1, opacity: 1, delay: 0.5, ease: "circ.out",
-      onComplete: () => { sideMaterial.transparent = false },
-    })
+    if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
+      gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
+      gsap.to(sideMaterial, {
+        duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out",
+        onComplete: () => { sideMaterial.transparent = false },
+      })
+    }
 
     emitter.$emit("mapDrillDown", { name, adcode })
     } catch (err) {
