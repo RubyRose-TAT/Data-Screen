@@ -70,13 +70,15 @@ defineExpose({
   .drill-back {
     position: absolute;
     // 放到顶部第一张统计卡（证照不符总数）下方
-    top: 152px;
+    top: 176px;
     left: calc(50% - 310px);
     transform: translateX(-50%);
     z-index: 2000;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    width: 220px;
     padding: 8px 16px;
     background: rgba(0, 0, 0, 0.6);
     border: 1px solid rgba(115, 208, 255, 0.4);
