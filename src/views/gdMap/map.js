@@ -127,6 +127,8 @@ export class World extends Mini3d {
     this.drillCenterMarker = null
     this.drillVisualCache = new Map()
     this.drillVisualLoading = new Map()
+    this.idlePrewarmTimer = null
+    this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
     // 雾
@@ -146,6 +148,7 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
+    this.scheduleIdlePrewarm()
     this.preloadDistrictGeoJSON()
   }
 
@@ -774,6 +777,7 @@ export class World extends Mini3d {
     this.eventElement.forEach((mesh) => {
       this.interactionManager.add(mesh)
       mesh.addEventListener("mousedown", (ev) => {
+        this.scheduleIdlePrewarm()
         if (this.drilledDown) return
         const name = ev.target.parent.userData.name
         if (name) {
@@ -781,6 +785,7 @@ export class World extends Mini3d {
         }
       })
       mesh.addEventListener("mouseover", (event) => {
+        this.scheduleIdlePrewarm()
         if (!objectsHover.includes(event.target.parent)) {
           objectsHover.push(event.target.parent)
         }
@@ -790,6 +795,7 @@ export class World extends Mini3d {
         move(event.target.parent)
       })
       mesh.addEventListener("mouseout", (event) => {
+        this.scheduleIdlePrewarm()
         objectsHover = objectsHover.filter((n) => n.userData.name !== event.target.parent.userData.name)
         if (objectsHover.length > 0) {
           const mesh = objectsHover[objectsHover.length - 1]
@@ -1669,6 +1675,28 @@ export class World extends Mini3d {
     this.drillVisualLoading.set(adcode, task)
   }
 
+  scheduleIdlePrewarm() {
+    if (this.prewarmAllStarted) return
+    if (this.idlePrewarmTimer) {
+      clearTimeout(this.idlePrewarmTimer)
+    }
+    // 10分钟无交互后，分批预热全部区县下钻模型
+    this.idlePrewarmTimer = setTimeout(() => {
+      this.prewarmAllDistrictVisuals()
+    }, 10 * 60 * 1000)
+  }
+
+  prewarmAllDistrictVisuals() {
+    if (this.prewarmAllStarted) return
+    this.prewarmAllStarted = true
+    const districtList = Object.entries(this.districtConfig).filter(([, item]) => item.adcode && item.adcode !== "360700")
+    districtList.forEach(([name], index) => {
+      setTimeout(() => {
+        this.warmupDrillVisual(name)
+      }, index * 80)
+    })
+  }
+
   getGeoJSONCenter(geojson) {
     const bounds = {
       minLng: Number.POSITIVE_INFINITY,
@@ -1889,6 +1917,7 @@ export class World extends Mini3d {
 
   destroy() {
     super.destroy()
+    this.idlePrewarmTimer && clearTimeout(this.idlePrewarmTimer)
     this.label3d && this.label3d.destroy()
   }
 }
