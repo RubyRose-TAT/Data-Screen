@@ -88,10 +88,6 @@ function applyDenseRank(list, valueKey = "value") {
 
 const DRILL_ZOOM_SCALE = 0.62
 const DRILL_MARKER_SCALE = 0.95
-const IDLE_PREWARM_TIMEOUT = 1200
-const IDLE_PREWARM_FALLBACK_DELAY = 300
-const IDLE_PREWARM_NEXT_TIMEOUT = 800
-const IDLE_PREWARM_NEXT_DELAY = 40
 
 export class World extends Mini3d {
   constructor(canvas, assets) {
@@ -133,9 +129,6 @@ export class World extends Mini3d {
     this.drillMapGroup = null
     this.drillCenterMarker = null
     this.drillVisualCache = new Map()
-    this.drillVisualLoading = new Map()
-    this.idlePrewarmTimer = null
-    this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
     // 雾
@@ -155,8 +148,6 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
-    this.scheduleIdlePrewarm()
-    this.preloadDistrictGeoJSON()
   }
 
   init() {
@@ -784,7 +775,6 @@ export class World extends Mini3d {
     this.eventElement.forEach((mesh) => {
       this.interactionManager.add(mesh)
       mesh.addEventListener("mousedown", (ev) => {
-        this.scheduleIdlePrewarm()
         if (this.drilledDown) return
         const name = ev.target.parent.userData.name
         if (name) {
@@ -792,17 +782,13 @@ export class World extends Mini3d {
         }
       })
       mesh.addEventListener("mouseover", (event) => {
-        this.scheduleIdlePrewarm()
         if (!objectsHover.includes(event.target.parent)) {
           objectsHover.push(event.target.parent)
         }
-        const hoverName = event.target.parent?.userData?.name
-        this.warmupDrillVisual(hoverName)
         document.body.style.cursor = "pointer"
         move(event.target.parent)
       })
       mesh.addEventListener("mouseout", (event) => {
-        this.scheduleIdlePrewarm()
         objectsHover = objectsHover.filter((n) => n.userData.name !== event.target.parent.userData.name)
         if (objectsHover.length > 0) {
           const mesh = objectsHover[objectsHover.length - 1]
@@ -1528,16 +1514,6 @@ export class World extends Mini3d {
     return request
   }
 
-  preloadDistrictGeoJSON() {
-    setTimeout(() => {
-      Object.values(this.districtConfig)
-        .filter((item) => item.adcode && item.adcode !== "360700")
-        .forEach((item) => {
-          this.loadDistrictGeoJSON(item.adcode).catch(() => {})
-        })
-    }, 1200)
-  }
-
   buildDrillVisual(geoDataText) {
     const drillMapGroup = new Group()
     drillMapGroup.rotation.x = -Math.PI / 2
@@ -1659,76 +1635,6 @@ export class World extends Mini3d {
     drillMapTop.setParent(drillMapGroup)
     drillLine.setParent(drillMapGroup)
     return { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial }
-  }
-
-  warmupDrillVisual(name) {
-    const districtInfo = this.districtConfig[name]
-    const adcode = districtInfo?.adcode
-    if (!adcode) return Promise.resolve()
-    if (this.drillVisualCache.has(adcode)) return Promise.resolve()
-    if (this.drillVisualLoading.has(adcode)) return this.drillVisualLoading.get(adcode)
-
-    const task = this.loadDistrictGeoJSON(adcode)
-      .then((geoData) => {
-        if (!this.drillVisualCache.has(adcode)) {
-          const visual = this.buildDrillVisual(geoData.text)
-          this.drillVisualCache.set(adcode, visual)
-        }
-      })
-      .catch(() => {})
-      .finally(() => {
-        this.drillVisualLoading.delete(adcode)
-      })
-
-    this.drillVisualLoading.set(adcode, task)
-    return task
-  }
-
-  scheduleIdlePrewarm() {
-    if (this.prewarmAllStarted) return
-    this.clearIdlePrewarmHandle()
-    // 一旦进入空闲帧就开始分批预热全部区县下钻模型
-    if (typeof requestIdleCallback === "function") {
-      this.idlePrewarmTimer = requestIdleCallback(() => {
-        this.prewarmAllDistrictVisuals()
-      }, { timeout: IDLE_PREWARM_TIMEOUT })
-    } else {
-      this.idlePrewarmTimer = setTimeout(() => {
-        this.prewarmAllDistrictVisuals()
-      }, IDLE_PREWARM_FALLBACK_DELAY)
-    }
-  }
-
-  prewarmAllDistrictVisuals() {
-    if (this.prewarmAllStarted) return
-    this.prewarmAllStarted = true
-    const districtNames = Object.entries(this.districtConfig)
-      .filter(([, item]) => item.adcode && item.adcode !== "360700")
-      .map(([name]) => name)
-
-    const warmNext = (index) => {
-      if (index >= districtNames.length) return
-      const name = districtNames[index]
-      this.warmupDrillVisual(name).finally(() => {
-        if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(() => warmNext(index + 1), { timeout: IDLE_PREWARM_NEXT_TIMEOUT })
-        } else {
-          setTimeout(() => warmNext(index + 1), IDLE_PREWARM_NEXT_DELAY)
-        }
-      })
-    }
-
-    warmNext(0)
-  }
-
-  clearIdlePrewarmHandle() {
-    if (!this.idlePrewarmTimer) return
-    if (typeof cancelIdleCallback === "function") {
-      cancelIdleCallback(this.idlePrewarmTimer)
-    } else {
-      clearTimeout(this.idlePrewarmTimer)
-    }
-    this.idlePrewarmTimer = null
   }
 
   getGeoJSONCenter(geojson) {
@@ -1949,7 +1855,6 @@ export class World extends Mini3d {
 
   destroy() {
     super.destroy()
-    this.clearIdlePrewarmHandle()
     this.label3d && this.label3d.destroy()
   }
 }
