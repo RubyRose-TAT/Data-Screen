@@ -1678,12 +1678,22 @@ export class World extends Mini3d {
   scheduleIdlePrewarm() {
     if (this.prewarmAllStarted) return
     if (this.idlePrewarmTimer) {
-      clearTimeout(this.idlePrewarmTimer)
+      if (typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(this.idlePrewarmTimer)
+      } else {
+        clearTimeout(this.idlePrewarmTimer)
+      }
     }
-    // 10分钟无交互后，分批预热全部区县下钻模型
-    this.idlePrewarmTimer = setTimeout(() => {
-      this.prewarmAllDistrictVisuals()
-    }, 10 * 60 * 1000)
+    // 一旦进入空闲帧就开始分批预热全部区县下钻模型
+    if (typeof requestIdleCallback === "function") {
+      this.idlePrewarmTimer = requestIdleCallback(() => {
+        this.prewarmAllDistrictVisuals()
+      }, { timeout: 1200 })
+    } else {
+      this.idlePrewarmTimer = setTimeout(() => {
+        this.prewarmAllDistrictVisuals()
+      }, 300)
+    }
   }
 
   prewarmAllDistrictVisuals() {
@@ -1917,7 +1927,13 @@ export class World extends Mini3d {
 
   destroy() {
     super.destroy()
-    this.idlePrewarmTimer && clearTimeout(this.idlePrewarmTimer)
+    if (this.idlePrewarmTimer) {
+      if (typeof cancelIdleCallback === "function") {
+        cancelIdleCallback(this.idlePrewarmTimer)
+      } else {
+        clearTimeout(this.idlePrewarmTimer)
+      }
+    }
     this.label3d && this.label3d.destroy()
   }
 }
