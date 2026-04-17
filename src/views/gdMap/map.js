@@ -155,7 +155,6 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
-    this.scheduleIdlePrewarm()
     this.preloadDistrictGeoJSON()
   }
 
@@ -322,6 +321,7 @@ export class World extends Mini3d {
           onComplete: () => {
             this.flyLineFocusGroup.visible = true
             emitter.$emit("mapPlayComplete")
+            this.scheduleIdlePrewarm()
           },
         },
         "focusMapOpacity"
