@@ -150,6 +150,7 @@ export class World extends Mini3d {
     this.currentScene = "mainScene"
     this.mainCameraState = null
     this.drillCameraState = null
+    this.isDrillTransitioning = false
     // 雾
     this.scene.fog = new Fog(0x102736, 1, 50)
     // 背景
@@ -1807,24 +1808,130 @@ export class World extends Mini3d {
   }
 
   tweenCamera(position, target, duration = 1.5, onComplete = null) {
+    this.camera.controls.enabled = false
     gsap.killTweensOf(this.camera.instance.position)
     gsap.killTweensOf(this.camera.controls.target)
-    gsap.to(this.camera.instance.position, {
-      duration,
-      x: position.x,
-      y: position.y,
-      z: position.z,
-      ease: "circ.out",
-      onUpdate: () => {
-        this.camera.instance.lookAt(target.x, target.y, target.z)
-      },
-      onComplete: () => {
-        this.camera.controls.target.set(target.x, target.y, target.z)
-        this.camera.instance.lookAt(target.x, target.y, target.z)
-        this.camera.controls.update()
-        onComplete && onComplete()
-      },
+    return new Promise((resolve) => {
+      gsap.to(this.camera.instance.position, {
+        duration,
+        x: position.x,
+        y: position.y,
+        z: position.z,
+        ease: "circ.out",
+        onUpdate: () => {
+          this.camera.instance.lookAt(target.x, target.y, target.z)
+        },
+        onComplete: () => {
+          this.camera.controls.target.set(target.x, target.y, target.z)
+          this.camera.instance.lookAt(target.x, target.y, target.z)
+          this.camera.controls.update()
+          this.camera.controls.enabled = true
+          onComplete && onComplete()
+          resolve()
+        },
+      })
     })
+  }
+
+  setDrillSceneVisible(bool) {
+    this.focusMapGroup.visible = !bool
+    this.barGroup.visible = !bool
+    this.quanGroup.visible = !bool
+    this.InfoPointGroup.visible = !bool
+    this.flyLineGroup.visible = !bool
+    this.flyLineFocusGroup.visible = !bool
+    this.scatterGroup.visible = !bool
+    this.particleGroup.visible = !bool
+    this.labelGroup.visible = true
+  }
+
+  setDrillRingState(centerX = 0, centerZ = 0, outerScale = 1, innerScale = 1) {
+    this.rotateBorder1.visible = true
+    this.rotateBorder2.visible = true
+    this.rotateBorder1.position.x = centerX
+    this.rotateBorder1.position.z = centerZ
+    this.rotateBorder2.position.x = centerX
+    this.rotateBorder2.position.z = centerZ
+    this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
+    this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
+    if (this.diffuseMesh) {
+      this.diffuseMesh.position.x = centerX
+      this.diffuseMesh.position.z = centerZ
+    }
+  }
+
+  setProvinceLabelVisible(bool) {
+    this.allProvinceLabel.forEach((label) => {
+      if (bool) {
+        label.show()
+      } else {
+        label.hide()
+      }
+    })
+  }
+
+  setInfoLabelVisible(bool) {
+    this.infoLabelElement.forEach((label) => {
+      label.visible = bool
+    })
+  }
+
+  createMapFocusTitleByMode(name, districtInfo = null, districtCenter = null) {
+    if (this.currentScene === "childScene" && districtInfo) {
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter || districtInfo.center, districtInfo.labelOffset || [0, 0], true)
+      return
+    }
+    this.setMapFocusTitle(
+      this.mapFocusLabelInfo.name,
+      this.mapFocusLabelInfo.enName,
+      this.mapFocusLabelInfo.center,
+      [0, 0]
+    )
+  }
+
+  resetDrillCameraFallback() {
+    this.tweenCamera(MAIN_CAMERA_POSITION, MAIN_CAMERA_TARGET, 1.5)
+  }
+
+  finishDrillTransition() {
+    this.isDrillTransitioning = false
+  }
+
+  async runDrillCameraTransition(position, target) {
+    try {
+      await this.tweenCamera(position, target, 1.5)
+    } finally {
+      this.finishDrillTransition()
+    }
+  }
+
+  beginDrillTransition() {
+    if (this.isDrillTransitioning) return false
+    this.isDrillTransitioning = true
+    return true
+  }
+
+  setDrillSceneMode(mode) {
+    this.currentScene = mode
+  }
+
+  restoreMainSceneVisual() {
+    this.setDrillSceneVisible(false)
+    this.setDrillRingState(0, 0, 1, 1)
+    this.setProvinceLabelVisible(true)
+    this.setInfoLabelVisible(true)
+    this.createMapFocusTitleByMode()
+  }
+
+  applyChildSceneVisual(name, districtInfo, districtCenter, ringCenterX, ringCenterZ, outerScale, innerScale) {
+    this.setDrillSceneVisible(true)
+    this.setDrillRingState(ringCenterX, ringCenterZ, outerScale, innerScale)
+    this.setInfoLabelVisible(false)
+    this.setProvinceLabelVisible(false)
+    this.createMapFocusTitleByMode(name, districtInfo, districtCenter)
+  }
+
+  tweenCameraTargetOnly(target, duration = 1.5) {
     gsap.to(this.camera.controls.target, {
       duration,
       x: target.x,
@@ -1835,9 +1942,11 @@ export class World extends Mini3d {
   }
 
   async drillDown(name) {
+    if (this.drilledDown || !this.beginDrillTransition()) return
     const districtInfo = this.districtConfig[name]
     if (!districtInfo?.adcode) {
       console.warn("未找到区县 adcode:", name)
+      this.finishDrillTransition()
       return
     }
     const adcode = districtInfo.adcode
@@ -1876,35 +1985,7 @@ export class World extends Mini3d {
         this.captureMainCameraState()
       }
 
-      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
-      this.focusMapGroup.visible = false
-      this.barGroup.visible = false
-      this.quanGroup.visible = false
-      this.labelGroup.visible = true
-      this.InfoPointGroup.visible = false
-      this.flyLineGroup.visible = false
-      this.flyLineFocusGroup.visible = false
-      this.scatterGroup.visible = false
-      this.particleGroup.visible = false
-      this.rotateBorder1.visible = true
-      this.rotateBorder2.visible = true
-      this.rotateBorder1.position.x = ringCenterX
-      this.rotateBorder1.position.z = ringCenterZ
-      this.rotateBorder2.position.x = ringCenterX
-      this.rotateBorder2.position.z = ringCenterZ
-      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
-      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
-      if (this.diffuseMesh) {
-        this.diffuseMesh.position.x = ringCenterX
-        this.diffuseMesh.position.z = ringCenterZ
-      }
-      this.infoLabelElement.forEach((label) => {
-        label.visible = false
-      })
-      this.allProvinceLabel.forEach((label) => {
-        label.hide()
-      })
-      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
+      this.applyChildSceneVisual(name, districtInfo, districtCenter, ringCenterX, ringCenterZ, outerScale, innerScale)
 
       let visual = this.drillVisualCache.get(adcode)
       if (!visual) {
@@ -1922,8 +2003,9 @@ export class World extends Mini3d {
         drillTopMaterial, sideMaterial,
       }
 
-      this.currentScene = "childScene"
-      this.tweenCamera(drillPosition, drillTarget, 1.5)
+      this.setDrillSceneMode("childScene")
+      this.tweenCameraTargetOnly(drillTarget, 1.5)
+      await this.runDrillCameraTransition(drillPosition, drillTarget)
       if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
         gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
         gsap.to(sideMaterial, {
@@ -1937,6 +2019,7 @@ export class World extends Mini3d {
       console.error("下钻失败:", err)
       this.drilledDown = false
       this.drilledName = ""
+      this.finishDrillTransition()
     } finally {
       if (shouldShowDrillLoading) {
         emitter.$emit("mapDrillLoading", false)
@@ -1944,8 +2027,8 @@ export class World extends Mini3d {
     }
   }
 
-  drillUp() {
-    if (!this.drilledDown) return
+  async drillUp() {
+    if (!this.drilledDown || !this.beginDrillTransition()) return
 
     if (this.drillMapGroup) {
       this.scene.remove(this.drillMapGroup)
@@ -1956,44 +2039,17 @@ export class World extends Mini3d {
       this.drillCenterMarker = null
     }
     this.drillGroup = null
-    this.focusMapGroup.visible = true
-    this.barGroup.visible = true
-    this.quanGroup.visible = true
-    this.labelGroup.visible = true
-    this.InfoPointGroup.visible = true
-    this.flyLineGroup.visible = true
-    this.flyLineFocusGroup.visible = true
-    this.scatterGroup.visible = true
-    this.particleGroup.visible = true
-    this.rotateBorder1.visible = true
-    this.rotateBorder2.visible = true
-    this.rotateBorder1.position.x = 0
-    this.rotateBorder1.position.z = 0
-    this.rotateBorder2.position.x = 0
-    this.rotateBorder2.position.z = 0
-    this.rotateBorder1.scale.set(1, 1, 1)
-    this.rotateBorder2.scale.set(1, 1, 1)
-    if (this.diffuseMesh) {
-      this.diffuseMesh.position.x = 0
-      this.diffuseMesh.position.z = 0
-    }
-    this.allProvinceLabel.forEach((label) => {
-      label.show()
-    })
-    this.setMapFocusTitle(
-      this.mapFocusLabelInfo.name,
-      this.mapFocusLabelInfo.enName,
-      this.mapFocusLabelInfo.center,
-      [0, 0]
-    )
+    this.restoreMainSceneVisual()
 
     this.drilledDown = false
     this.drilledName = ""
-    this.currentScene = "mainScene"
+    this.setDrillSceneMode("mainScene")
     if (this.mainCameraState?.position && this.mainCameraState?.target) {
-      this.tweenCamera(this.mainCameraState.position, this.mainCameraState.target, 1.5)
+      this.tweenCameraTargetOnly(this.mainCameraState.target, 1.5)
+      await this.runDrillCameraTransition(this.mainCameraState.position, this.mainCameraState.target)
     } else {
-      this.tweenCamera(MAIN_CAMERA_POSITION, MAIN_CAMERA_TARGET, 1.5)
+      this.tweenCameraTargetOnly(MAIN_CAMERA_TARGET, 1.5)
+      await this.runDrillCameraTransition(MAIN_CAMERA_POSITION, MAIN_CAMERA_TARGET)
     }
 
     emitter.$emit("mapDrillUp")
