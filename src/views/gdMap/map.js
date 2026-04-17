@@ -135,6 +135,7 @@ export class World extends Mini3d {
     this.drillVisualCache = new Map()
     this.drillVisualLoading = new Map()
     this.districtPreloadStarted = false
+    this.prewarmPriorityDistrict = ""
     this.idlePrewarmTimer = null
     this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
@@ -792,6 +793,7 @@ export class World extends Mini3d {
         if (this.drilledDown) return
         const name = ev.target.parent.userData.name
         if (name) {
+          this.prewarmPriorityDistrict = name
           this.drillDown(name)
         }
       })
@@ -801,6 +803,7 @@ export class World extends Mini3d {
           objectsHover.push(event.target.parent)
         }
         const hoverName = event.target.parent?.userData?.name
+        this.prewarmPriorityDistrict = hoverName || this.prewarmPriorityDistrict
         this.warmupDrillVisual(hoverName)
         document.body.style.cursor = "pointer"
         move(event.target.parent)
@@ -1706,9 +1709,13 @@ export class World extends Mini3d {
   prewarmAllDistrictVisuals() {
     if (this.prewarmAllStarted) return
     this.prewarmAllStarted = true
-    const districtNames = Object.entries(this.districtConfig)
+    let districtNames = Object.entries(this.districtConfig)
       .filter(([, item]) => item.adcode && item.adcode !== "360700")
       .map(([name]) => name)
+    const priorityName = this.prewarmPriorityDistrict
+    if (priorityName && districtNames.includes(priorityName)) {
+      districtNames = [priorityName, ...districtNames.filter((name) => name !== priorityName)]
+    }
 
     const warmNext = (index) => {
       if (index >= districtNames.length) return
