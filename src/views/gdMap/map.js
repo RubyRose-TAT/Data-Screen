@@ -1487,9 +1487,10 @@ export class World extends Mini3d {
       const geoDataText = geoData.text
       const geoDataJSON = geoData.json
       const [districtX, districtY] = this.geoProjection(districtInfo.center)
-      const districtWorldPosition = new Vector3(districtX, 0, districtY)
+      // geoProjection 的 y 轴在 three 场景里需要取反，保持与其它地图元素坐标系一致
+      const districtWorldPosition = new Vector3(districtX, 0, -districtY)
       const ringCenterX = districtX
-      const ringCenterY = districtY
+      const ringCenterZ = -districtY
       const outerScale = districtInfo.ringOuterScale
       const innerScale = districtInfo.ringInnerScale
       const cameraHeight = districtInfo.cameraHeight
@@ -1508,14 +1509,14 @@ export class World extends Mini3d {
       this.rotateBorder1.visible = true
       this.rotateBorder2.visible = true
       this.rotateBorder1.position.x = ringCenterX
-      this.rotateBorder1.position.z = ringCenterY
+      this.rotateBorder1.position.z = ringCenterZ
       this.rotateBorder2.position.x = ringCenterX
-      this.rotateBorder2.position.z = ringCenterY
+      this.rotateBorder2.position.z = ringCenterZ
       this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
       this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
       if (this.diffuseMesh) {
         this.diffuseMesh.position.x = ringCenterX
-        this.diffuseMesh.position.z = ringCenterY
+        this.diffuseMesh.position.z = ringCenterZ
       }
       this.infoLabelElement.forEach((label) => {
         label.visible = false
@@ -1646,7 +1647,7 @@ export class World extends Mini3d {
     drillLine.setParent(this.drillMapGroup)
     const drillFocus = new Focus(this, {color1: 0xbdfdfd, color2: 0xbdfdfd})
     const focusScale = districtInfo.focusScale
-    drillFocus.position.set(ringCenterX, -ringCenterY, this.depth + 0.44)
+    drillFocus.position.set(ringCenterX, ringCenterZ, this.depth + 0.44)
     drillFocus.scale.set(focusScale, focusScale, focusScale)
     this.drillMapGroup.add(drillFocus)
 
