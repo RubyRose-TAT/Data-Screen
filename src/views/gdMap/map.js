@@ -1529,12 +1529,13 @@ export class World extends Mini3d {
       const geoData = await this.loadDistrictGeoJSON(adcode)
       const geoDataText = geoData.text
       const geoDataJSON = geoData.json
-      const districtCenter = this.getGeoJSONCenter(geoDataJSON) || districtInfo.center
+      // 优先使用区县配置中的标记中心点（业务标注中心），避免几何包围盒中心带来的偏移
+      const districtCenter = districtInfo.center || this.getGeoJSONCenter(geoDataJSON)
       const [districtX, districtY] = this.geoProjection(districtCenter)
-      // geoProjection 的 y 轴在 three 场景里需要取反，保持与其它地图元素坐标系一致
-      const districtWorldPosition = new Vector3(districtX, 0, -districtY)
+      // 县级地图面数据在构建后经过 group 旋转，落到场景坐标时对应的是 +districtY
+      const districtWorldPosition = new Vector3(districtX, 0, districtY)
       const ringCenterX = districtX
-      const ringCenterZ = -districtY
+      const ringCenterZ = districtY
       const outerScale = districtInfo.ringOuterScale
       const innerScale = districtInfo.ringInnerScale
       const cameraHeight = districtInfo.cameraHeight
