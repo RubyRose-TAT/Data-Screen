@@ -86,6 +86,13 @@ function applyDenseRank(list, valueKey = "value") {
   })
 }
 
+const DRILL_ZOOM_SCALE = 0.62
+const DRILL_MARKER_SCALE = 0.95
+const IDLE_PREWARM_TIMEOUT = 1200
+const IDLE_PREWARM_FALLBACK_DELAY = 300
+const IDLE_PREWARM_NEXT_TIMEOUT = 800
+const IDLE_PREWARM_NEXT_DELAY = 40
+
 export class World extends Mini3d {
   constructor(canvas, assets) {
     super(canvas)
@@ -124,6 +131,11 @@ export class World extends Mini3d {
     this.drilledName = ""
     this.drillGroup = null
     this.drillMapGroup = null
+    this.drillCenterMarker = null
+    this.drillVisualCache = new Map()
+    this.drillVisualLoading = new Map()
+    this.idlePrewarmTimer = null
+    this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
     // 雾
@@ -143,6 +155,7 @@ export class World extends Mini3d {
     // 创建环境光
     this.initEnvironment()
     this.init()
+    this.scheduleIdlePrewarm()
     this.preloadDistrictGeoJSON()
   }
 
@@ -771,6 +784,7 @@ export class World extends Mini3d {
     this.eventElement.forEach((mesh) => {
       this.interactionManager.add(mesh)
       mesh.addEventListener("mousedown", (ev) => {
+        this.scheduleIdlePrewarm()
         if (this.drilledDown) return
         const name = ev.target.parent.userData.name
         if (name) {
@@ -778,13 +792,17 @@ export class World extends Mini3d {
         }
       })
       mesh.addEventListener("mouseover", (event) => {
+        this.scheduleIdlePrewarm()
         if (!objectsHover.includes(event.target.parent)) {
           objectsHover.push(event.target.parent)
         }
+        const hoverName = event.target.parent?.userData?.name
+        this.warmupDrillVisual(hoverName)
         document.body.style.cursor = "pointer"
         move(event.target.parent)
       })
       mesh.addEventListener("mouseout", (event) => {
+        this.scheduleIdlePrewarm()
         objectsHover = objectsHover.filter((n) => n.userData.name !== event.target.parent.userData.name)
         if (objectsHover.length > 0) {
           const mesh = objectsHover[objectsHover.length - 1]
@@ -819,6 +837,55 @@ export class World extends Mini3d {
     mesh2.rotateY((Math.PI / 180) * 60)
     mesh3.rotateY((Math.PI / 180) * 120)
     return [mesh, mesh2, mesh3]
+  }
+
+  createDrillCenterMarker(centerX, centerZ, scale = 1) {
+    const markerGroup = new Group()
+    // 直接复用赣州市地图各县光柱同款生成逻辑，确保颜色/纹理/混合参数一致
+    const beamWrapGroup = new Group()
+    beamWrapGroup.rotation.x = -Math.PI / 2
+    const beams = this.createHUIGUANG(2.8 * scale, 0xfffef4)
+    beamWrapGroup.add(...beams)
+    markerGroup.add(beamWrapGroup)
+
+    const ringTexture1 = this.assets.instance.getResource("guangquan1")
+    const ringTexture2 = this.assets.instance.getResource("guangquan2")
+    const ringGeometry = new PlaneGeometry(0.5 * scale, 0.5 * scale)
+    const ringMaterial1 = new MeshBasicMaterial({
+      color: 0xffffff,
+      map: ringTexture1,
+      alphaMap: ringTexture1,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      depthTest: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      fog: false,
+    })
+    const ringMaterial2 = new MeshBasicMaterial({
+      color: 0xffffff,
+      map: ringTexture2,
+      alphaMap: ringTexture2,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      depthTest: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      fog: false,
+    })
+    const ring1 = new Mesh(ringGeometry, ringMaterial1)
+    const ring2 = new Mesh(ringGeometry, ringMaterial2)
+    ring1.rotation.x = -Math.PI / 2
+    ring2.rotation.x = -Math.PI / 2
+    ring2.position.y -= 0.001
+    markerGroup.add(ring1, ring2)
+
+    markerGroup.position.set(centerX, this.depth + 0.44, centerZ)
+    markerGroup.renderOrder = 99
+    this.scene.add(markerGroup)
+    return markerGroup
   }
 
   createQuan(position, index) {
@@ -1471,63 +1538,10 @@ export class World extends Mini3d {
     }, 1200)
   }
 
-  async drillDown(name) {
-    const districtInfo = this.districtConfig[name]
-    if (!districtInfo?.adcode) {
-      console.warn("未找到区县 adcode:", name)
-      return
-    }
-    const adcode = districtInfo.adcode
-
-    this.drilledDown = true
-    this.drilledName = name
-
-    try {
-      const geoData = await this.loadDistrictGeoJSON(adcode)
-      const geoDataText = geoData.text
-      const geoDataJSON = geoData.json
-      const [districtX, districtY] = this.geoProjection(districtInfo.center)
-      const districtWorldPosition = new Vector3(districtX, 0, districtY)
-      const ringCenterX = districtX
-      const ringCenterY = districtY
-      const outerScale = districtInfo.ringOuterScale
-      const innerScale = districtInfo.ringInnerScale
-      const cameraHeight = districtInfo.cameraHeight
-      const cameraDistance = districtInfo.cameraDistance
-
-      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
-      this.focusMapGroup.visible = false
-      this.barGroup.visible = false
-      this.quanGroup.visible = false
-      this.labelGroup.visible = true
-      this.InfoPointGroup.visible = false
-      this.flyLineGroup.visible = false
-      this.flyLineFocusGroup.visible = false
-      this.scatterGroup.visible = false
-      this.particleGroup.visible = false
-      this.rotateBorder1.visible = true
-      this.rotateBorder2.visible = true
-      this.rotateBorder1.position.x = ringCenterX
-      this.rotateBorder1.position.z = ringCenterY
-      this.rotateBorder2.position.x = ringCenterX
-      this.rotateBorder2.position.z = ringCenterY
-      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
-      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
-      if (this.diffuseMesh) {
-        this.diffuseMesh.position.x = ringCenterX
-        this.diffuseMesh.position.z = ringCenterY
-      }
-      this.infoLabelElement.forEach((label) => {
-        label.visible = false
-      })
-      this.allProvinceLabel.forEach((label) => {
-        label.hide()
-      })
-      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0], true)
-
-      this.drillMapGroup = new Group()
-      this.drillMapGroup.rotation.x = -Math.PI / 2
-      this.drillMapGroup.position.set(0, 0.2, 0)
+  buildDrillVisual(geoDataText) {
+    const drillMapGroup = new Group()
+    drillMapGroup.rotation.x = -Math.PI / 2
+    drillMapGroup.position.set(0, 0.2, 0)
 
     const drillTopMaterial = new MeshLambertMaterial({
       color: 0xffffff, transparent: true, opacity: 0, fog: false, side: DoubleSide,
@@ -1641,43 +1655,222 @@ export class World extends Mini3d {
     })
     drillLine.lineGroup.position.z += this.depth + 0.23
 
-    drillMap.setParent(this.drillMapGroup)
-    drillMapTop.setParent(this.drillMapGroup)
-    drillLine.setParent(this.drillMapGroup)
-    const drillFocus = new Focus(this, {color1: 0xbdfdfd, color2: 0xbdfdfd})
-    const focusScale = districtInfo.focusScale
-    drillFocus.position.set(ringCenterX, -ringCenterY, this.depth + 0.44)
-    drillFocus.scale.set(focusScale, focusScale, focusScale)
-    this.drillMapGroup.add(drillFocus)
+    drillMap.setParent(drillMapGroup)
+    drillMapTop.setParent(drillMapGroup)
+    drillLine.setParent(drillMapGroup)
+    return { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial }
+  }
 
-    this.scene.add(this.drillMapGroup)
+  warmupDrillVisual(name) {
+    const districtInfo = this.districtConfig[name]
+    const adcode = districtInfo?.adcode
+    if (!adcode) return Promise.resolve()
+    if (this.drillVisualCache.has(adcode)) return Promise.resolve()
+    if (this.drillVisualLoading.has(adcode)) return this.drillVisualLoading.get(adcode)
 
-    this.drillGroup = {
-      drillMap, drillMapTop, drillLine,
-      drillTopMaterial, sideMaterial,
+    const task = this.loadDistrictGeoJSON(adcode)
+      .then((geoData) => {
+        if (!this.drillVisualCache.has(adcode)) {
+          const visual = this.buildDrillVisual(geoData.text)
+          this.drillVisualCache.set(adcode, visual)
+        }
+      })
+      .catch(() => {})
+      .finally(() => {
+        this.drillVisualLoading.delete(adcode)
+      })
+
+    this.drillVisualLoading.set(adcode, task)
+    return task
+  }
+
+  scheduleIdlePrewarm() {
+    if (this.prewarmAllStarted) return
+    this.clearIdlePrewarmHandle()
+    // 一旦进入空闲帧就开始分批预热全部区县下钻模型
+    if (typeof requestIdleCallback === "function") {
+      this.idlePrewarmTimer = requestIdleCallback(() => {
+        this.prewarmAllDistrictVisuals()
+      }, { timeout: IDLE_PREWARM_TIMEOUT })
+    } else {
+      this.idlePrewarmTimer = setTimeout(() => {
+        this.prewarmAllDistrictVisuals()
+      }, IDLE_PREWARM_FALLBACK_DELAY)
+    }
+  }
+
+  prewarmAllDistrictVisuals() {
+    if (this.prewarmAllStarted) return
+    this.prewarmAllStarted = true
+    const districtNames = Object.entries(this.districtConfig)
+      .filter(([, item]) => item.adcode && item.adcode !== "360700")
+      .map(([name]) => name)
+
+    const warmNext = (index) => {
+      if (index >= districtNames.length) return
+      const name = districtNames[index]
+      this.warmupDrillVisual(name).finally(() => {
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(() => warmNext(index + 1), { timeout: IDLE_PREWARM_NEXT_TIMEOUT })
+        } else {
+          setTimeout(() => warmNext(index + 1), IDLE_PREWARM_NEXT_DELAY)
+        }
+      })
     }
 
-    gsap.killTweensOf(this.camera.instance.position)
-    gsap.to(this.camera.instance.position, {
-      duration: 1.5,
-      x: districtWorldPosition.x,
-      y: cameraHeight,
-      z: districtWorldPosition.z + cameraDistance,
-      ease: "circ.out",
-      onUpdate: () => {
-        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-      },
-      onComplete: () => {
-        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-      },
-    })
-    gsap.to(drillTopMaterial, { duration: 1, opacity: 1, delay: 0.5, ease: "circ.out" })
-    gsap.to(sideMaterial, {
-      duration: 1, opacity: 1, delay: 0.5, ease: "circ.out",
-      onComplete: () => { sideMaterial.transparent = false },
+    warmNext(0)
+  }
+
+  clearIdlePrewarmHandle() {
+    if (!this.idlePrewarmTimer) return
+    if (typeof cancelIdleCallback === "function") {
+      cancelIdleCallback(this.idlePrewarmTimer)
+    } else {
+      clearTimeout(this.idlePrewarmTimer)
+    }
+    this.idlePrewarmTimer = null
+  }
+
+  getGeoJSONCenter(geojson) {
+    const bounds = {
+      minLng: Number.POSITIVE_INFINITY,
+      maxLng: Number.NEGATIVE_INFINITY,
+      minLat: Number.POSITIVE_INFINITY,
+      maxLat: Number.NEGATIVE_INFINITY,
+    }
+
+    const updateBounds = (lng, lat) => {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+      bounds.minLng = Math.min(bounds.minLng, lng)
+      bounds.maxLng = Math.max(bounds.maxLng, lng)
+      bounds.minLat = Math.min(bounds.minLat, lat)
+      bounds.maxLat = Math.max(bounds.maxLat, lat)
+    }
+
+    const visitCoords = (coords) => {
+      if (!Array.isArray(coords) || coords.length === 0) return
+      if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+        updateBounds(coords[0], coords[1])
+        return
+      }
+      coords.forEach((item) => visitCoords(item))
+    }
+
+    const features = Array.isArray(geojson?.features) ? geojson.features : []
+    features.forEach((feature) => {
+      visitCoords(feature?.geometry?.coordinates)
     })
 
-    emitter.$emit("mapDrillDown", { name, adcode })
+    const isValid =
+      Number.isFinite(bounds.minLng) &&
+      Number.isFinite(bounds.maxLng) &&
+      Number.isFinite(bounds.minLat) &&
+      Number.isFinite(bounds.maxLat)
+
+    if (!isValid) return null
+    return [
+      (bounds.minLng + bounds.maxLng) / 2,
+      (bounds.minLat + bounds.maxLat) / 2,
+    ]
+  }
+
+  async drillDown(name) {
+    const districtInfo = this.districtConfig[name]
+    if (!districtInfo?.adcode) {
+      console.warn("未找到区县 adcode:", name)
+      return
+    }
+    const adcode = districtInfo.adcode
+
+    this.drilledDown = true
+    this.drilledName = name
+
+    try {
+      const geoData = await this.loadDistrictGeoJSON(adcode)
+      const geoDataText = geoData.text
+      const geoDataJSON = geoData.json
+      // 优先使用区县配置中的标记中心点（业务标注中心），避免几何包围盒中心带来的偏移
+      const districtCenter = districtInfo.center || this.getGeoJSONCenter(geoDataJSON)
+      const [districtX, districtY] = this.geoProjection(districtCenter)
+      // 县级地图面数据在构建后经过 group 旋转，落到场景坐标时对应的是 +districtY
+      const districtWorldPosition = new Vector3(districtX, 0, districtY)
+      const ringCenterX = districtX
+      const ringCenterZ = districtY
+      const outerScale = districtInfo.ringOuterScale
+      const innerScale = districtInfo.ringInnerScale
+      // 下钻镜头统一拉近，避免县级地图看起来过小
+      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * DRILL_ZOOM_SCALE, 4.8)
+      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * DRILL_ZOOM_SCALE, 5.5)
+
+      // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
+      this.focusMapGroup.visible = false
+      this.barGroup.visible = false
+      this.quanGroup.visible = false
+      this.labelGroup.visible = true
+      this.InfoPointGroup.visible = false
+      this.flyLineGroup.visible = false
+      this.flyLineFocusGroup.visible = false
+      this.scatterGroup.visible = false
+      this.particleGroup.visible = false
+      this.rotateBorder1.visible = true
+      this.rotateBorder2.visible = true
+      this.rotateBorder1.position.x = ringCenterX
+      this.rotateBorder1.position.z = ringCenterZ
+      this.rotateBorder2.position.x = ringCenterX
+      this.rotateBorder2.position.z = ringCenterZ
+      this.rotateBorder1.scale.set(outerScale, outerScale, outerScale)
+      this.rotateBorder2.scale.set(innerScale, innerScale, innerScale)
+      if (this.diffuseMesh) {
+        this.diffuseMesh.position.x = ringCenterX
+        this.diffuseMesh.position.z = ringCenterZ
+      }
+      this.infoLabelElement.forEach((label) => {
+        label.visible = false
+      })
+      this.allProvinceLabel.forEach((label) => {
+        label.hide()
+      })
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
+
+      let visual = this.drillVisualCache.get(adcode)
+      if (!visual) {
+        visual = this.buildDrillVisual(geoDataText)
+        this.drillVisualCache.set(adcode, visual)
+      }
+      const { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial } = visual
+      this.drillMapGroup = drillMapGroup
+
+      this.scene.add(this.drillMapGroup)
+      this.drillCenterMarker = this.createDrillCenterMarker(ringCenterX, ringCenterZ, DRILL_MARKER_SCALE)
+
+      this.drillGroup = {
+        drillMap, drillMapTop, drillLine,
+        drillTopMaterial, sideMaterial,
+      }
+
+      gsap.killTweensOf(this.camera.instance.position)
+      gsap.to(this.camera.instance.position, {
+        duration: 1.5,
+        x: districtWorldPosition.x,
+        y: cameraHeight,
+        z: districtWorldPosition.z + cameraDistance,
+        ease: "circ.out",
+        onUpdate: () => {
+          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+        },
+        onComplete: () => {
+          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+        },
+      })
+      if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
+        gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
+        gsap.to(sideMaterial, {
+          duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out",
+          onComplete: () => { sideMaterial.transparent = false },
+        })
+      }
+
+      emitter.$emit("mapDrillDown", { name, adcode })
     } catch (err) {
       console.error("下钻失败:", err)
       this.drilledDown = false
@@ -1691,6 +1884,10 @@ export class World extends Mini3d {
     if (this.drillMapGroup) {
       this.scene.remove(this.drillMapGroup)
       this.drillMapGroup = null
+    }
+    if (this.drillCenterMarker) {
+      this.scene.remove(this.drillCenterMarker)
+      this.drillCenterMarker = null
     }
     this.drillGroup = null
     this.focusMapGroup.visible = true
@@ -1752,6 +1949,7 @@ export class World extends Mini3d {
 
   destroy() {
     super.destroy()
+    this.clearIdlePrewarmHandle()
     this.label3d && this.label3d.destroy()
   }
 }
