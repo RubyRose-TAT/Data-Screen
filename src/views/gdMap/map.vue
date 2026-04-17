@@ -69,8 +69,9 @@ defineExpose({
 
   .drill-back {
     position: absolute;
-    top: 94px;
-    left: 50%;
+    // 放到顶部第一张统计卡（证照不符总数）下方
+    top: 152px;
+    left: calc(50% - 310px);
     transform: translateX(-50%);
     z-index: 2000;
     display: flex;
