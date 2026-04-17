@@ -71,7 +71,7 @@ defineExpose({
     position: absolute;
     // 放到顶部第一张统计卡（证照不符总数）下方
     top: 176px;
-    left: calc(50% - 310px);
+    left: calc(50% - 340px);
     transform: translateX(-50%);
     z-index: 2000;
     display: flex;
@@ -80,7 +80,7 @@ defineExpose({
     gap: 6px;
     width: 220px;
     padding: 8px 16px;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(8, 33, 58, 0.35);
     border: 1px solid rgba(115, 208, 255, 0.4);
     border-radius: 4px;
     color: #73d0ff;
@@ -89,7 +89,7 @@ defineExpose({
     transition: all 0.3s;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(8, 33, 58, 0.5);
       border-color: rgba(115, 208, 255, 0.8);
     }
 
