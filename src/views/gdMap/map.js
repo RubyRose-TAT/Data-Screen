@@ -1657,8 +1657,9 @@ export class World extends Mini3d {
   warmupDrillVisual(name) {
     const districtInfo = this.districtConfig[name]
     const adcode = districtInfo?.adcode
-    if (!adcode) return
-    if (this.drillVisualCache.has(adcode) || this.drillVisualLoading.has(adcode)) return
+    if (!adcode) return Promise.resolve()
+    if (this.drillVisualCache.has(adcode)) return Promise.resolve()
+    if (this.drillVisualLoading.has(adcode)) return this.drillVisualLoading.get(adcode)
 
     const task = this.loadDistrictGeoJSON(adcode)
       .then((geoData) => {
@@ -1673,6 +1674,7 @@ export class World extends Mini3d {
       })
 
     this.drillVisualLoading.set(adcode, task)
+    return task
   }
 
   scheduleIdlePrewarm() {
@@ -1699,12 +1701,23 @@ export class World extends Mini3d {
   prewarmAllDistrictVisuals() {
     if (this.prewarmAllStarted) return
     this.prewarmAllStarted = true
-    const districtList = Object.entries(this.districtConfig).filter(([, item]) => item.adcode && item.adcode !== "360700")
-    districtList.forEach(([name], index) => {
-      setTimeout(() => {
-        this.warmupDrillVisual(name)
-      }, index * 80)
-    })
+    const districtNames = Object.entries(this.districtConfig)
+      .filter(([, item]) => item.adcode && item.adcode !== "360700")
+      .map(([name]) => name)
+
+    const warmNext = (index) => {
+      if (index >= districtNames.length) return
+      const name = districtNames[index]
+      this.warmupDrillVisual(name).finally(() => {
+        if (typeof requestIdleCallback === "function") {
+          requestIdleCallback(() => warmNext(index + 1), { timeout: 800 })
+        } else {
+          setTimeout(() => warmNext(index + 1), 40)
+        }
+      })
+    }
+
+    warmNext(0)
   }
 
   getGeoJSONCenter(geojson) {
