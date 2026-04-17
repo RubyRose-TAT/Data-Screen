@@ -1471,6 +1471,49 @@ export class World extends Mini3d {
     }, 1200)
   }
 
+  getGeoJSONCenter(geojson) {
+    const bounds = {
+      minLng: Number.POSITIVE_INFINITY,
+      maxLng: Number.NEGATIVE_INFINITY,
+      minLat: Number.POSITIVE_INFINITY,
+      maxLat: Number.NEGATIVE_INFINITY,
+    }
+
+    const updateBounds = (lng, lat) => {
+      if (!Number.isFinite(lng) || !Number.isFinite(lat)) return
+      bounds.minLng = Math.min(bounds.minLng, lng)
+      bounds.maxLng = Math.max(bounds.maxLng, lng)
+      bounds.minLat = Math.min(bounds.minLat, lat)
+      bounds.maxLat = Math.max(bounds.maxLat, lat)
+    }
+
+    const visitCoords = (coords) => {
+      if (!Array.isArray(coords) || coords.length === 0) return
+      if (typeof coords[0] === "number" && typeof coords[1] === "number") {
+        updateBounds(coords[0], coords[1])
+        return
+      }
+      coords.forEach((item) => visitCoords(item))
+    }
+
+    const features = Array.isArray(geojson?.features) ? geojson.features : []
+    features.forEach((feature) => {
+      visitCoords(feature?.geometry?.coordinates)
+    })
+
+    const isValid =
+      Number.isFinite(bounds.minLng) &&
+      Number.isFinite(bounds.maxLng) &&
+      Number.isFinite(bounds.minLat) &&
+      Number.isFinite(bounds.maxLat)
+
+    if (!isValid) return null
+    return [
+      (bounds.minLng + bounds.maxLng) / 2,
+      (bounds.minLat + bounds.maxLat) / 2,
+    ]
+  }
+
   async drillDown(name) {
     const districtInfo = this.districtConfig[name]
     if (!districtInfo?.adcode) {
@@ -1486,7 +1529,8 @@ export class World extends Mini3d {
       const geoData = await this.loadDistrictGeoJSON(adcode)
       const geoDataText = geoData.text
       const geoDataJSON = geoData.json
-      const [districtX, districtY] = this.geoProjection(districtInfo.center)
+      const districtCenter = this.getGeoJSONCenter(geoDataJSON) || districtInfo.center
+      const [districtX, districtY] = this.geoProjection(districtCenter)
       // geoProjection 的 y 轴在 three 场景里需要取反，保持与其它地图元素坐标系一致
       const districtWorldPosition = new Vector3(districtX, 0, -districtY)
       const ringCenterX = districtX
@@ -1524,7 +1568,7 @@ export class World extends Mini3d {
       this.allProvinceLabel.forEach((label) => {
         label.hide()
       })
-      this.setMapFocusTitle(name, districtInfo.enName || name, districtInfo.center, districtInfo.labelOffset || [0, 0], true)
+      this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
 
       this.drillMapGroup = new Group()
       this.drillMapGroup.rotation.x = -Math.PI / 2
