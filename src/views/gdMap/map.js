@@ -92,6 +92,12 @@ const IDLE_PREWARM_TIMEOUT = 1200
 const IDLE_PREWARM_FALLBACK_DELAY = 300
 const IDLE_PREWARM_NEXT_TIMEOUT = 800
 const IDLE_PREWARM_NEXT_DELAY = 40
+const MAIN_CAMERA_POSITION = {
+  x: -0.17427287762525134,
+  y: 13.678992786206543,
+  z: 20.688611202093714,
+}
+const MAIN_CAMERA_TARGET = { x: 0, y: 0, z: 0 }
 
 export class World extends Mini3d {
   constructor(canvas, assets) {
@@ -140,6 +146,10 @@ export class World extends Mini3d {
     this.prewarmAllStarted = false
     this.districtGeoCache = new Map()
     this.districtGeoLoading = new Map()
+    // 场景状态（参考 3d-map 的主场景 / 子场景切换模型）
+    this.currentScene = "mainScene"
+    this.mainCameraState = null
+    this.drillCameraState = null
     // 雾
     this.scene.fog = new Fog(0x102736, 1, 50)
     // 背景
@@ -217,12 +227,15 @@ export class World extends Mini3d {
     tl.addLabel("bar", 3)
     tl.to(this.camera.instance.position, {
       duration: 2,
-      x: -0.17427287762525134,
-      y: 13.678992786206543,
-      z: 20.688611202093714,
+      x: MAIN_CAMERA_POSITION.x,
+      y: MAIN_CAMERA_POSITION.y,
+      z: MAIN_CAMERA_POSITION.z,
       ease: "circ.out",
       onStart: () => {
         this.flyLineFocusGroup.visible = false
+      },
+      onComplete: () => {
+        this.captureMainCameraState()
       },
     })
     tl.to(
@@ -1785,6 +1798,42 @@ export class World extends Mini3d {
     ]
   }
 
+  captureMainCameraState() {
+    this.mainCameraState = {
+      position: this.camera.instance.position.clone(),
+      target: this.camera.controls.target.clone(),
+    }
+    this.camera.controls.saveState()
+  }
+
+  tweenCamera(position, target, duration = 1.5, onComplete = null) {
+    gsap.killTweensOf(this.camera.instance.position)
+    gsap.killTweensOf(this.camera.controls.target)
+    gsap.to(this.camera.instance.position, {
+      duration,
+      x: position.x,
+      y: position.y,
+      z: position.z,
+      ease: "circ.out",
+      onUpdate: () => {
+        this.camera.instance.lookAt(target.x, target.y, target.z)
+      },
+      onComplete: () => {
+        this.camera.controls.target.set(target.x, target.y, target.z)
+        this.camera.instance.lookAt(target.x, target.y, target.z)
+        this.camera.controls.update()
+        onComplete && onComplete()
+      },
+    })
+    gsap.to(this.camera.controls.target, {
+      duration,
+      x: target.x,
+      y: target.y,
+      z: target.z,
+      ease: "circ.out",
+    })
+  }
+
   async drillDown(name) {
     const districtInfo = this.districtConfig[name]
     if (!districtInfo?.adcode) {
@@ -1816,6 +1865,16 @@ export class World extends Mini3d {
       // 下钻镜头统一拉近，避免县级地图看起来过小
       const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * DRILL_ZOOM_SCALE, 4.8)
       const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * DRILL_ZOOM_SCALE, 5.5)
+      const drillTarget = { x: districtWorldPosition.x, y: 0, z: districtWorldPosition.z }
+      const drillPosition = {
+        x: districtWorldPosition.x,
+        y: cameraHeight,
+        z: districtWorldPosition.z + cameraDistance,
+      }
+      this.drillCameraState = { position: drillPosition, target: drillTarget }
+      if (!this.mainCameraState) {
+        this.captureMainCameraState()
+      }
 
       // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
@@ -1863,20 +1922,8 @@ export class World extends Mini3d {
         drillTopMaterial, sideMaterial,
       }
 
-      gsap.killTweensOf(this.camera.instance.position)
-      gsap.to(this.camera.instance.position, {
-        duration: 1.5,
-        x: districtWorldPosition.x,
-        y: cameraHeight,
-        z: districtWorldPosition.z + cameraDistance,
-        ease: "circ.out",
-        onUpdate: () => {
-          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-        },
-        onComplete: () => {
-          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-        },
-      })
+      this.currentScene = "childScene"
+      this.tweenCamera(drillPosition, drillTarget, 1.5)
       if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
         gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
         gsap.to(sideMaterial, {
@@ -1942,21 +1989,12 @@ export class World extends Mini3d {
 
     this.drilledDown = false
     this.drilledName = ""
-
-    gsap.killTweensOf(this.camera.instance.position)
-    gsap.to(this.camera.instance.position, {
-      duration: 1.5,
-      x: -0.17427287762525134,
-      y: 13.678992786206543,
-      z: 20.688611202093714,
-      ease: "circ.out",
-      onUpdate: () => {
-        this.camera.instance.lookAt(0, 0, 0)
-      },
-      onComplete: () => {
-        this.camera.instance.lookAt(0, 0, 0)
-      },
-    })
+    this.currentScene = "mainScene"
+    if (this.mainCameraState?.position && this.mainCameraState?.target) {
+      this.tweenCamera(this.mainCameraState.position, this.mainCameraState.target, 1.5)
+    } else {
+      this.tweenCamera(MAIN_CAMERA_POSITION, MAIN_CAMERA_TARGET, 1.5)
+    }
 
     emitter.$emit("mapDrillUp")
   }
