@@ -824,26 +824,12 @@ export class World extends Mini3d {
 
   createDrillCenterMarker(centerX, centerZ, scale = 1) {
     const markerGroup = new Group()
-    const beamHeight = 2.8 * scale
-    const beamGeometry = new PlaneGeometry(0.35 * scale, beamHeight)
-    beamGeometry.translate(0, beamHeight / 2, 0)
-    const beamTexture = this.assets.instance.getResource("huiguang")
-    const beamMaterial = new MeshBasicMaterial({
-      color: 0xfffef4,
-      map: beamTexture,
-      transparent: true,
-      opacity: 0.4,
-      depthWrite: false,
-      side: DoubleSide,
-      blending: AdditiveBlending,
-      fog: false,
-    })
-    const beam1 = new Mesh(beamGeometry, beamMaterial)
-    const beam2 = beam1.clone()
-    const beam3 = beam1.clone()
-    beam2.rotation.y = (Math.PI / 180) * 60
-    beam3.rotation.y = (Math.PI / 180) * 120
-    markerGroup.add(beam1, beam2, beam3)
+    // 直接复用赣州市地图各县光柱同款生成逻辑，确保颜色/纹理/混合参数一致
+    const beamWrapGroup = new Group()
+    beamWrapGroup.rotation.x = -Math.PI / 2
+    const beams = this.createHUIGUANG(2.8 * scale, 0xfffef4)
+    beamWrapGroup.add(...beams)
+    markerGroup.add(beamWrapGroup)
 
     const ringTexture1 = this.assets.instance.getResource("guangquan1")
     const ringTexture2 = this.assets.instance.getResource("guangquan2")
