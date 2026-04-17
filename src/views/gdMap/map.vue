@@ -58,6 +58,9 @@ defineExpose({
 </script>
 
 <style lang="scss">
+$drill-title-zh-size: 24px;
+$drill-title-en-size: 9px;
+
 .map {
   position: absolute;
   z-index: 1;
@@ -270,9 +273,9 @@ defineExpose({
       flex-direction: column;
       &.drill-title {
         span {
-          font-size: 24px;
+          font-size: $drill-title-zh-size;
           &:last-child {
-            font-size: 9px;
+            font-size: $drill-title-en-size;
           }
         }
       }

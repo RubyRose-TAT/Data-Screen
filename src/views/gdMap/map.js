@@ -86,6 +86,13 @@ function applyDenseRank(list, valueKey = "value") {
   })
 }
 
+const DRILL_ZOOM_SCALE = 0.62
+const DRILL_MARKER_SCALE = 0.95
+const IDLE_PREWARM_TIMEOUT = 1200
+const IDLE_PREWARM_FALLBACK_DELAY = 300
+const IDLE_PREWARM_NEXT_TIMEOUT = 800
+const IDLE_PREWARM_NEXT_DELAY = 40
+
 export class World extends Mini3d {
   constructor(canvas, assets) {
     super(canvas)
@@ -1679,22 +1686,16 @@ export class World extends Mini3d {
 
   scheduleIdlePrewarm() {
     if (this.prewarmAllStarted) return
-    if (this.idlePrewarmTimer) {
-      if (typeof cancelIdleCallback === "function") {
-        cancelIdleCallback(this.idlePrewarmTimer)
-      } else {
-        clearTimeout(this.idlePrewarmTimer)
-      }
-    }
+    this.clearIdlePrewarmHandle()
     // 一旦进入空闲帧就开始分批预热全部区县下钻模型
     if (typeof requestIdleCallback === "function") {
       this.idlePrewarmTimer = requestIdleCallback(() => {
         this.prewarmAllDistrictVisuals()
-      }, { timeout: 1200 })
+      }, { timeout: IDLE_PREWARM_TIMEOUT })
     } else {
       this.idlePrewarmTimer = setTimeout(() => {
         this.prewarmAllDistrictVisuals()
-      }, 300)
+      }, IDLE_PREWARM_FALLBACK_DELAY)
     }
   }
 
@@ -1710,14 +1711,24 @@ export class World extends Mini3d {
       const name = districtNames[index]
       this.warmupDrillVisual(name).finally(() => {
         if (typeof requestIdleCallback === "function") {
-          requestIdleCallback(() => warmNext(index + 1), { timeout: 800 })
+          requestIdleCallback(() => warmNext(index + 1), { timeout: IDLE_PREWARM_NEXT_TIMEOUT })
         } else {
-          setTimeout(() => warmNext(index + 1), 40)
+          setTimeout(() => warmNext(index + 1), IDLE_PREWARM_NEXT_DELAY)
         }
       })
     }
 
     warmNext(0)
+  }
+
+  clearIdlePrewarmHandle() {
+    if (!this.idlePrewarmTimer) return
+    if (typeof cancelIdleCallback === "function") {
+      cancelIdleCallback(this.idlePrewarmTimer)
+    } else {
+      clearTimeout(this.idlePrewarmTimer)
+    }
+    this.idlePrewarmTimer = null
   }
 
   getGeoJSONCenter(geojson) {
@@ -1788,9 +1799,8 @@ export class World extends Mini3d {
       const outerScale = districtInfo.ringOuterScale
       const innerScale = districtInfo.ringInnerScale
       // 下钻镜头统一拉近，避免县级地图看起来过小
-      const drillZoomScale = 0.62
-      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * drillZoomScale, 4.8)
-      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * drillZoomScale, 5.5)
+      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * DRILL_ZOOM_SCALE, 4.8)
+      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * DRILL_ZOOM_SCALE, 5.5)
 
       // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
@@ -1822,46 +1832,45 @@ export class World extends Mini3d {
       })
       this.setMapFocusTitle(name, districtInfo.enName || name, districtCenter, districtInfo.labelOffset || [0, 0], true)
 
-    let visual = this.drillVisualCache.get(adcode)
-    if (!visual) {
-      visual = this.buildDrillVisual(geoDataText)
-      this.drillVisualCache.set(adcode, visual)
-    }
-    const { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial } = visual
-    this.drillMapGroup = drillMapGroup
+      let visual = this.drillVisualCache.get(adcode)
+      if (!visual) {
+        visual = this.buildDrillVisual(geoDataText)
+        this.drillVisualCache.set(adcode, visual)
+      }
+      const { drillMapGroup, drillMap, drillMapTop, drillLine, drillTopMaterial, sideMaterial } = visual
+      this.drillMapGroup = drillMapGroup
 
-    this.scene.add(this.drillMapGroup)
-    const markerScale = 0.95
-    this.drillCenterMarker = this.createDrillCenterMarker(ringCenterX, ringCenterZ, markerScale)
+      this.scene.add(this.drillMapGroup)
+      this.drillCenterMarker = this.createDrillCenterMarker(ringCenterX, ringCenterZ, DRILL_MARKER_SCALE)
 
-    this.drillGroup = {
-      drillMap, drillMapTop, drillLine,
-      drillTopMaterial, sideMaterial,
-    }
+      this.drillGroup = {
+        drillMap, drillMapTop, drillLine,
+        drillTopMaterial, sideMaterial,
+      }
 
-    gsap.killTweensOf(this.camera.instance.position)
-    gsap.to(this.camera.instance.position, {
-      duration: 1.5,
-      x: districtWorldPosition.x,
-      y: cameraHeight,
-      z: districtWorldPosition.z + cameraDistance,
-      ease: "circ.out",
-      onUpdate: () => {
-        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-      },
-      onComplete: () => {
-        this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
-      },
-    })
-    if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
-      gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
-      gsap.to(sideMaterial, {
-        duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out",
-        onComplete: () => { sideMaterial.transparent = false },
+      gsap.killTweensOf(this.camera.instance.position)
+      gsap.to(this.camera.instance.position, {
+        duration: 1.5,
+        x: districtWorldPosition.x,
+        y: cameraHeight,
+        z: districtWorldPosition.z + cameraDistance,
+        ease: "circ.out",
+        onUpdate: () => {
+          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+        },
+        onComplete: () => {
+          this.camera.instance.lookAt(districtWorldPosition.x, 0, districtWorldPosition.z)
+        },
       })
-    }
+      if (drillTopMaterial.opacity < 1 || sideMaterial.opacity < 1) {
+        gsap.to(drillTopMaterial, { duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out" })
+        gsap.to(sideMaterial, {
+          duration: 0.7, opacity: 1, delay: 0.15, ease: "circ.out",
+          onComplete: () => { sideMaterial.transparent = false },
+        })
+      }
 
-    emitter.$emit("mapDrillDown", { name, adcode })
+      emitter.$emit("mapDrillDown", { name, adcode })
     } catch (err) {
       console.error("下钻失败:", err)
       this.drilledDown = false
@@ -1940,13 +1949,7 @@ export class World extends Mini3d {
 
   destroy() {
     super.destroy()
-    if (this.idlePrewarmTimer) {
-      if (typeof cancelIdleCallback === "function") {
-        cancelIdleCallback(this.idlePrewarmTimer)
-      } else {
-        clearTimeout(this.idlePrewarmTimer)
-      }
-    }
+    this.clearIdlePrewarmHandle()
     this.label3d && this.label3d.destroy()
   }
 }
