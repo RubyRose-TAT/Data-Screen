@@ -825,14 +825,14 @@ export class World extends Mini3d {
   createDrillCenterMarker(centerX, centerZ, scale = 1) {
     const markerGroup = new Group()
     const beamHeight = 2.2 * scale
-    const beamGeometry = new PlaneGeometry(0.18 * scale, beamHeight)
+    const beamGeometry = new PlaneGeometry(0.35 * scale, beamHeight)
     beamGeometry.translate(0, beamHeight / 2, 0)
     const beamTexture = this.assets.instance.getResource("huiguang")
     const beamMaterial = new MeshBasicMaterial({
-      color: 0xdfffff,
+      color: 0x77fbf5,
       map: beamTexture,
       transparent: true,
-      opacity: 0.72,
+      opacity: 0.4,
       depthWrite: false,
       side: DoubleSide,
       blending: AdditiveBlending,
@@ -840,28 +840,46 @@ export class World extends Mini3d {
     })
     const beam1 = new Mesh(beamGeometry, beamMaterial)
     const beam2 = beam1.clone()
-    beam2.rotation.y = Math.PI / 2
-    markerGroup.add(beam1, beam2)
+    const beam3 = beam1.clone()
+    beam2.rotation.y = (Math.PI / 180) * 60
+    beam3.rotation.y = (Math.PI / 180) * 120
+    markerGroup.add(beam1, beam2, beam3)
 
-    const ringTexture = this.assets.instance.getResource("guangquan2")
-    const ringGeometry = new PlaneGeometry(0.6 * scale, 0.6 * scale)
-    const ringMaterial = new MeshBasicMaterial({
+    const ringTexture1 = this.assets.instance.getResource("guangquan1")
+    const ringTexture2 = this.assets.instance.getResource("guangquan2")
+    const ringGeometry = new PlaneGeometry(0.5 * scale, 0.5 * scale)
+    const ringMaterial1 = new MeshBasicMaterial({
       color: 0xffffff,
-      map: ringTexture,
-      alphaMap: ringTexture,
+      map: ringTexture1,
+      alphaMap: ringTexture1,
       transparent: true,
-      opacity: 0.95,
+      opacity: 1,
       depthWrite: false,
+      depthTest: false,
       side: DoubleSide,
       blending: AdditiveBlending,
       fog: false,
     })
-    const ring = new Mesh(ringGeometry, ringMaterial)
-    ring.rotation.x = -Math.PI / 2
-    ring.position.y = 0.03
-    markerGroup.add(ring)
+    const ringMaterial2 = new MeshBasicMaterial({
+      color: 0xffffff,
+      map: ringTexture2,
+      alphaMap: ringTexture2,
+      transparent: true,
+      opacity: 1,
+      depthWrite: false,
+      depthTest: false,
+      side: DoubleSide,
+      blending: AdditiveBlending,
+      fog: false,
+    })
+    const ring1 = new Mesh(ringGeometry, ringMaterial1)
+    const ring2 = new Mesh(ringGeometry, ringMaterial2)
+    ring1.rotation.x = -Math.PI / 2
+    ring2.rotation.x = -Math.PI / 2
+    ring2.position.y -= 0.001
+    markerGroup.add(ring1, ring2)
 
-    markerGroup.position.set(centerX, this.depth + 0.1, centerZ)
+    markerGroup.position.set(centerX, this.depth + 0.44, centerZ)
     markerGroup.renderOrder = 99
     this.scene.add(markerGroup)
     return markerGroup
