@@ -1538,8 +1538,10 @@ export class World extends Mini3d {
       const ringCenterZ = districtY
       const outerScale = districtInfo.ringOuterScale
       const innerScale = districtInfo.ringInnerScale
-      const cameraHeight = districtInfo.cameraHeight
-      const cameraDistance = districtInfo.cameraDistance
+      // 下钻镜头统一拉近，避免县级地图看起来过小
+      const drillZoomScale = 0.62
+      const cameraHeight = Math.max((districtInfo.cameraHeight || 8.5) * drillZoomScale, 4.8)
+      const cameraDistance = Math.max((districtInfo.cameraDistance || 11) * drillZoomScale, 5.5)
 
       // 下钻后隐藏市级装饰层，避免和区县层叠加产生错位
       this.focusMapGroup.visible = false
