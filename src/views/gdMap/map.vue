@@ -58,6 +58,9 @@ defineExpose({
 </script>
 
 <style lang="scss">
+$drill-title-zh-size: 24px;
+$drill-title-en-size: 9px;
+
 .map {
   position: absolute;
   z-index: 1;
@@ -69,15 +72,18 @@ defineExpose({
 
   .drill-back {
     position: absolute;
-    top: 94px;
-    left: 50%;
+    // 放到顶部第一张统计卡（证照不符总数）下方
+    top: 176px;
+    left: calc(50% - 340px);
     transform: translateX(-50%);
     z-index: 2000;
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 6px;
+    width: 220px;
     padding: 8px 16px;
-    background: rgba(0, 0, 0, 0.6);
+    background: rgba(8, 33, 58, 0.35);
     border: 1px solid rgba(115, 208, 255, 0.4);
     border-radius: 4px;
     color: #73d0ff;
@@ -86,7 +92,7 @@ defineExpose({
     transition: all 0.3s;
 
     &:hover {
-      background: rgba(0, 0, 0, 0.8);
+      background: rgba(8, 33, 58, 0.5);
       border-color: rgba(115, 208, 255, 0.8);
     }
 
@@ -267,9 +273,9 @@ defineExpose({
       flex-direction: column;
       &.drill-title {
         span {
-          font-size: 34px;
+          font-size: $drill-title-zh-size;
           &:last-child {
-            font-size: 11px;
+            font-size: $drill-title-en-size;
           }
         }
       }
