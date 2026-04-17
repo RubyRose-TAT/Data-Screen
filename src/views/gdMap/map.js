@@ -1690,11 +1690,6 @@ export class World extends Mini3d {
     drillMap.setParent(this.drillMapGroup)
     drillMapTop.setParent(this.drillMapGroup)
     drillLine.setParent(this.drillMapGroup)
-    const drillFocus = new Focus(this, {color1: 0xbdfdfd, color2: 0xbdfdfd})
-    const focusScale = districtInfo.focusScale
-    drillFocus.position.set(ringCenterX, ringCenterZ, this.depth + 0.44)
-    drillFocus.scale.set(focusScale, focusScale, focusScale)
-    this.drillMapGroup.add(drillFocus)
 
     this.scene.add(this.drillMapGroup)
 
