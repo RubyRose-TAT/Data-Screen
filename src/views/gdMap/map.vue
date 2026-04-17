@@ -270,9 +270,9 @@ defineExpose({
       flex-direction: column;
       &.drill-title {
         span {
-          font-size: 34px;
+          font-size: 24px;
           &:last-child {
-            font-size: 11px;
+            font-size: 9px;
           }
         }
       }

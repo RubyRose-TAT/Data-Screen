@@ -824,12 +824,12 @@ export class World extends Mini3d {
 
   createDrillCenterMarker(centerX, centerZ, scale = 1) {
     const markerGroup = new Group()
-    const beamHeight = 2.2 * scale
+    const beamHeight = 2.8 * scale
     const beamGeometry = new PlaneGeometry(0.35 * scale, beamHeight)
     beamGeometry.translate(0, beamHeight / 2, 0)
     const beamTexture = this.assets.instance.getResource("huiguang")
     const beamMaterial = new MeshBasicMaterial({
-      color: 0x77fbf5,
+      color: 0xfffef4,
       map: beamTexture,
       transparent: true,
       opacity: 0.4,
@@ -1758,7 +1758,7 @@ export class World extends Mini3d {
     drillLine.setParent(this.drillMapGroup)
 
     this.scene.add(this.drillMapGroup)
-    const markerScale = Math.max((districtInfo.focusScale || 0.9) * 0.55, 0.35)
+    const markerScale = 0.95
     this.drillCenterMarker = this.createDrillCenterMarker(ringCenterX, ringCenterZ, markerScale)
 
     this.drillGroup = {
